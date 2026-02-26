@@ -8,3 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Large database files
+spy.db
+spy_corrupted.db
