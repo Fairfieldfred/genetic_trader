@@ -1,0 +1,58 @@
+{
+  "run_id": "20251103_054838",
+  "mode": "portfolio",
+  "symbol": null,
+  "portfolio_symbols": [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "NVDA",
+    "JPM",
+    "BAC",
+    "WFC",
+    "GS",
+    "MS",
+    "JNJ",
+    "UNH",
+    "PFE",
+    "ABBV",
+    "TMO",
+    "XOM",
+    "CVX",
+    "COP",
+    "WMT",
+    "HD"
+  ],
+  "portfolio_size": 20,
+  "initial_allocation_pct": 50,
+  "start_date": "2012-01-01",
+  "end_date": "2020-12-31",
+  "population_size": 100,
+  "num_generations": 40,
+  "best_trader": {
+    "generation": 39,
+    "fitness": 100.43603451143534,
+    "genes": {
+      "ma_short_period": 25,
+      "ma_long_period": 44,
+      "ma_type": 0,
+      "stop_loss_pct": 7.673954497838496,
+      "take_profit_pct": 5.183594099445191,
+      "position_size_pct": 7.790758570502878
+    },
+    "performance": {
+      "total_return": 260.8511337790132,
+      "sharpe_ratio": 1.0284284488463482,
+      "max_drawdown": -26.552696989171594,
+      "trade_count": 19,
+      "win_rate": 0.0
+    }
+  },
+  "benchmark": {
+    "buy_and_hold_return": 283.4960625371363,
+    "allocation_pct": 50,
+    "strategy_outperformance": -22.644928758123115,
+    "beats_benchmark": false
+  }
+}

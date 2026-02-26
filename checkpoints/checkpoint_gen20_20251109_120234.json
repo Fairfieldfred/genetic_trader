@@ -1,0 +1,20 @@
+{
+  "generation": 19,
+  "fitness": 70.38086067675772,
+  "chromosome": [
+    19,
+    73,
+    1,
+    9.74935262744161,
+    13.626111287312687,
+    23.942362181269562
+  ],
+  "genes": {
+    "ma_short_period": 19,
+    "ma_long_period": 73,
+    "ma_type": 1,
+    "stop_loss_pct": 9.74935262744161,
+    "take_profit_pct": 13.626111287312687,
+    "position_size_pct": 23.942362181269562
+  }
+}

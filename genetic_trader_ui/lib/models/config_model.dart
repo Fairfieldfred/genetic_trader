@@ -1,0 +1,414 @@
+/// Configuration model representing config.py parameters
+class GeneticConfig {
+  // Database configuration
+  String databasePath;
+  String testSymbol;
+
+  // Portfolio configuration
+  bool usePortfolio;
+  int portfolioSize;
+  List<String> portfolioStocks;
+  bool autoSelectPortfolio;
+  double initialAllocationPct;
+
+  // Date range
+  String trainStartDate;
+  String trainEndDate;
+  String testStartDate;
+  String testEndDate;
+
+  // Genetic algorithm parameters
+  int populationSize;
+  int numGenerations;
+  double mutationRate;
+  double crossoverRate;
+  double elitismPct;  // Percentage of population to preserve as elite
+  int tournamentSize;
+
+  // Gene definitions
+  Map<String, GeneDefinition> geneDefinitions;
+
+  // Backtrader configuration
+  double initialCash;
+  double commission;
+
+  // Fitness weights
+  Map<String, double> fitnessWeights;
+
+  // Minimum trades
+  int minTradesRequired;
+
+  // Performance settings
+  bool useParallelEvaluation;
+  int? maxParallelWorkers;
+
+  // Random seed
+  int? randomSeed;
+
+  // Macroeconomic context
+  bool useMacroData;
+
+  GeneticConfig({
+    this.databasePath = 'spy.db',
+    this.testSymbol = 'AAPL',
+    this.usePortfolio = true,
+    this.portfolioSize = 20,
+    this.portfolioStocks = const [],
+    this.autoSelectPortfolio = true,  // Auto-select random stocks by default
+    this.initialAllocationPct = 80.0,
+    this.trainStartDate = '2012-01-01',
+    this.trainEndDate = '2020-12-31',
+    this.testStartDate = '2021-01-01',
+    this.testEndDate = '2023-12-31',
+    this.populationSize = 30,
+    this.numGenerations = 40,
+    this.mutationRate = 0.2,
+    this.crossoverRate = 0.9,
+    this.elitismPct = 20.0,  // 20% of population
+    this.tournamentSize = 4,
+    this.geneDefinitions = const {},
+    this.initialCash = 100000.0,
+    this.commission = 0.001,
+    this.fitnessWeights = const {
+      'total_return': 0.40,
+      'sharpe_ratio': 0.24,
+      'max_drawdown': 0.24,
+      'win_rate': 0.12,
+    },
+    this.minTradesRequired = 5,
+    this.useParallelEvaluation = true,
+    this.maxParallelWorkers,
+    this.randomSeed = 42,
+    this.useMacroData = false,
+  });
+
+  /// Create config from JSON
+  factory GeneticConfig.fromJson(Map<String, dynamic> json) {
+    return GeneticConfig(
+      databasePath: json['DATABASE_PATH'] ?? 'spy.db',
+      testSymbol: json['TEST_SYMBOL'] ?? 'AAPL',
+      usePortfolio: json['USE_PORTFOLIO'] ?? true,
+      portfolioSize: json['PORTFOLIO_SIZE'] ?? 20,
+      portfolioStocks: List<String>.from(json['PORTFOLIO_STOCKS'] ?? []),
+      autoSelectPortfolio: json['AUTO_SELECT_PORTFOLIO'] ?? true,
+      initialAllocationPct: (json['INITIAL_ALLOCATION_PCT'] ?? 80.0).toDouble(),
+      trainStartDate: json['TRAIN_START_DATE'] ?? '2012-01-01',
+      trainEndDate: json['TRAIN_END_DATE'] ?? '2020-12-31',
+      testStartDate: json['TEST_START_DATE'] ?? '2021-01-01',
+      testEndDate: json['TEST_END_DATE'] ?? '2023-12-31',
+      populationSize: json['POPULATION_SIZE'] ?? 30,
+      numGenerations: json['NUM_GENERATIONS'] ?? 40,
+      mutationRate: (json['MUTATION_RATE'] ?? 0.2).toDouble(),
+      crossoverRate: (json['CROSSOVER_RATE'] ?? 0.9).toDouble(),
+      elitismPct: (json['ELITISM_PCT'] ?? 20.0).toDouble(),
+      tournamentSize: json['TOURNAMENT_SIZE'] ?? 4,
+      initialCash: (json['INITIAL_CASH'] ?? 100000.0).toDouble(),
+      commission: (json['COMMISSION'] ?? 0.001).toDouble(),
+      fitnessWeights: Map<String, double>.from(json['FITNESS_WEIGHTS'] ?? {}),
+      minTradesRequired: json['MIN_TRADES_REQUIRED'] ?? 5,
+      useParallelEvaluation: json['USE_PARALLEL_EVALUATION'] ?? true,
+      maxParallelWorkers: json['MAX_PARALLEL_WORKERS'],
+      randomSeed: json['RANDOM_SEED'],
+      useMacroData: json['USE_MACRO_DATA'] ?? false,
+    );
+  }
+
+  /// Convert to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'DATABASE_PATH': databasePath,
+      'TEST_SYMBOL': testSymbol,
+      'USE_PORTFOLIO': usePortfolio,
+      'PORTFOLIO_SIZE': portfolioSize,
+      'PORTFOLIO_STOCKS': portfolioStocks,
+      'AUTO_SELECT_PORTFOLIO': autoSelectPortfolio,
+      'INITIAL_ALLOCATION_PCT': initialAllocationPct,
+      'TRAIN_START_DATE': trainStartDate,
+      'TRAIN_END_DATE': trainEndDate,
+      'TEST_START_DATE': testStartDate,
+      'TEST_END_DATE': testEndDate,
+      'POPULATION_SIZE': populationSize,
+      'NUM_GENERATIONS': numGenerations,
+      'MUTATION_RATE': mutationRate,
+      'CROSSOVER_RATE': crossoverRate,
+      'ELITISM_PCT': elitismPct,
+      'TOURNAMENT_SIZE': tournamentSize,
+      'INITIAL_CASH': initialCash,
+      'COMMISSION': commission,
+      'FITNESS_WEIGHTS': fitnessWeights,
+      'MIN_TRADES_REQUIRED': minTradesRequired,
+      'USE_PARALLEL_EVALUATION': useParallelEvaluation,
+      'MAX_PARALLEL_WORKERS': maxParallelWorkers,
+      'RANDOM_SEED': randomSeed,
+      'USE_MACRO_DATA': useMacroData,
+    };
+  }
+
+  /// Helper to convert Dart boolean to Python boolean
+  String _toPythonBool(bool value) {
+    return value ? 'True' : 'False';
+  }
+
+  /// Helper to convert nullable int to Python (None or number)
+  String _toPythonNullableInt(int? value) {
+    return value == null ? 'None' : value.toString();
+  }
+
+  /// Convert to Python config.py format
+  String toPythonConfig() {
+    final buffer = StringBuffer();
+
+    buffer.writeln('"""');
+    buffer.writeln('Configuration file for genetic trading algorithm.');
+    buffer.writeln('Auto-generated from Flutter UI.');
+    buffer.writeln('"""');
+    buffer.writeln();
+
+    buffer.writeln('# Database configuration');
+    buffer.writeln('DATABASE_PATH = "$databasePath"');
+    buffer.writeln('TEST_SYMBOL = "$testSymbol"');
+    buffer.writeln();
+
+    buffer.writeln('# Multi-stock portfolio configuration');
+    buffer.writeln('USE_PORTFOLIO = ${_toPythonBool(usePortfolio)}');
+    buffer.writeln('PORTFOLIO_SIZE = $portfolioSize');
+    buffer.writeln('PORTFOLIO_STOCKS = [');
+    for (var stock in portfolioStocks) {
+      buffer.writeln('    "$stock",');
+    }
+    buffer.writeln(']');
+    buffer.writeln('AUTO_SELECT_PORTFOLIO = ${_toPythonBool(autoSelectPortfolio)}');
+    buffer.writeln();
+
+    buffer.writeln('# Data split configuration');
+    buffer.writeln('TRAIN_START_DATE = "$trainStartDate"');
+    buffer.writeln('TRAIN_END_DATE = "$trainEndDate"');
+    buffer.writeln('TEST_START_DATE = "$testStartDate"');
+    buffer.writeln('TEST_END_DATE = "$testEndDate"');
+    buffer.writeln();
+
+    buffer.writeln('# Genetic algorithm configuration');
+    buffer.writeln('POPULATION_SIZE = $populationSize');
+    buffer.writeln('NUM_GENERATIONS = $numGenerations');
+    buffer.writeln('MUTATION_RATE = $mutationRate');
+    buffer.writeln('CROSSOVER_RATE = $crossoverRate');
+
+    // Calculate elitism count from percentage (round up)
+    final elitismCount = (populationSize * elitismPct / 100).ceil();
+    buffer.writeln('ELITISM_COUNT = $elitismCount  # ${elitismPct.toStringAsFixed(1)}% of population');
+    buffer.writeln();
+
+    buffer.writeln('# Tournament selection');
+    buffer.writeln('TOURNAMENT_SIZE = $tournamentSize');
+    buffer.writeln();
+
+    buffer.writeln('# Gene definitions and bounds');
+    buffer.writeln('# Each gene is defined as: (min_value, max_value, data_type)');
+    buffer.writeln('GENE_DEFINITIONS = {');
+    buffer.writeln('    # Moving Average Strategy genes');
+    buffer.writeln('    \'ma_short_period\': (5, 30, int),      # Short MA period (fast signal)');
+    buffer.writeln('    \'ma_long_period\': (30, 100, int),     # Long MA period (slow signal)');
+    buffer.writeln('    \'ma_type\': (0, 1, int),                # 0 = SMA, 1 = EMA');
+    buffer.writeln();
+    buffer.writeln('    # Risk Management genes');
+    buffer.writeln('    \'stop_loss_pct\': (1.0, 10.0, float),');
+    buffer.writeln('    \'take_profit_pct\': (2.0, 15.0, float),');
+    buffer.writeln('    \'position_size_pct\': (5.0, 25.0, float),');
+
+    if (useMacroData) {
+      buffer.writeln();
+      buffer.writeln('    # Macroeconomic Context genes');
+      buffer.writeln(
+          '    \'macro_enabled\': (0, 1, int),');
+      buffer.writeln(
+          '    \'macro_weight\': (0.0, 1.0, float),');
+      buffer.writeln(
+          '    \'macro_vix_threshold\': (15.0, 50.0, float),');
+      buffer.writeln(
+          '    \'macro_vix_position_scale\': (0.2, 1.0, float),');
+      buffer.writeln(
+          '    \'macro_yc_threshold\': (-1.0, 1.0, float),');
+      buffer.writeln(
+          '    \'macro_yc_action\': (0, 2, int),');
+      buffer.writeln(
+          '    \'macro_rate_threshold\': (1.0, 8.0, float),');
+      buffer.writeln(
+          '    \'macro_rate_position_scale\': (0.3, 1.0, float),');
+      buffer.writeln(
+          '    \'macro_cpi_threshold\': (2.0, 8.0, float),');
+      buffer.writeln(
+          '    \'macro_cpi_position_scale\': (0.3, 1.0, float),');
+      buffer.writeln(
+          '    \'macro_unemp_threshold\': (4.0, 10.0, float),');
+      buffer.writeln(
+          '    \'macro_unemp_action\': (0, 2, int),');
+      buffer.writeln(
+          '    \'macro_risk_stop_adj\': (0.5, 2.0, float),');
+      buffer.writeln(
+          '    \'macro_risk_tp_adj\': (0.5, 2.0, float),');
+      buffer.writeln(
+          '    \'macro_regime_count_req\': (1, 4, int),');
+    }
+
+    buffer.writeln('}');
+    buffer.writeln();
+
+    buffer.writeln('# Gene order in chromosome (important for consistency)');
+    buffer.writeln('GENE_ORDER = [');
+    buffer.writeln('    \'ma_short_period\',');
+    buffer.writeln('    \'ma_long_period\',');
+    buffer.writeln('    \'ma_type\',');
+    buffer.writeln('    \'stop_loss_pct\',');
+    buffer.writeln('    \'take_profit_pct\',');
+    buffer.writeln('    \'position_size_pct\',');
+
+    if (useMacroData) {
+      buffer.writeln('    \'macro_enabled\',');
+      buffer.writeln('    \'macro_weight\',');
+      buffer.writeln('    \'macro_vix_threshold\',');
+      buffer.writeln('    \'macro_vix_position_scale\',');
+      buffer.writeln('    \'macro_yc_threshold\',');
+      buffer.writeln('    \'macro_yc_action\',');
+      buffer.writeln('    \'macro_rate_threshold\',');
+      buffer.writeln('    \'macro_rate_position_scale\',');
+      buffer.writeln('    \'macro_cpi_threshold\',');
+      buffer.writeln('    \'macro_cpi_position_scale\',');
+      buffer.writeln('    \'macro_unemp_threshold\',');
+      buffer.writeln('    \'macro_unemp_action\',');
+      buffer.writeln('    \'macro_risk_stop_adj\',');
+      buffer.writeln('    \'macro_risk_tp_adj\',');
+      buffer.writeln('    \'macro_regime_count_req\',');
+    }
+
+    buffer.writeln(']');
+    buffer.writeln();
+
+    buffer.writeln('# Macroeconomic data configuration');
+    buffer.writeln(
+        'USE_MACRO_DATA = ${_toPythonBool(useMacroData)}');
+    buffer.writeln("MACRO_DATA_TABLE = 'macro_indicators'");
+    buffer.writeln();
+
+    buffer.writeln('# Backtrader configuration');
+    buffer.writeln('INITIAL_CASH = $initialCash');
+    buffer.writeln('COMMISSION = $commission  # 0.1% commission per trade');
+    buffer.writeln();
+
+    buffer.writeln('# Portfolio initial allocation (only applies when USE_PORTFOLIO = True)');
+    buffer.writeln('# Percentage of capital to allocate equally across all stocks at start');
+    buffer.writeln('# Remaining percentage stays as cash for strategy signals');
+    buffer.writeln('# Example: 80.0 means 80% divided equally among stocks, 20% reserved for trading');
+    buffer.writeln('INITIAL_ALLOCATION_PCT = $initialAllocationPct  # Range: 0.0 to 100.0');
+    buffer.writeln();
+
+    buffer.writeln('# Fitness function weights');
+    buffer.writeln('FITNESS_WEIGHTS = {');
+    fitnessWeights.forEach((key, value) {
+      buffer.writeln('    \'$key\': $value,');
+    });
+    buffer.writeln('}');
+    buffer.writeln();
+
+    buffer.writeln('# Minimum trades required for valid fitness');
+    buffer.writeln('MIN_TRADES_REQUIRED = $minTradesRequired');
+    buffer.writeln();
+
+    buffer.writeln('# Logging configuration');
+    buffer.writeln('LOG_LEVEL = "INFO"');
+    buffer.writeln('LOG_EVERY_N_GENERATIONS = 1');
+    buffer.writeln('SAVE_BEST_EVERY_N_GENERATIONS = 10');
+    buffer.writeln();
+
+    buffer.writeln('# Output paths');
+    buffer.writeln('RESULTS_DIR = "results"');
+    buffer.writeln('LOGS_DIR = "logs"');
+    buffer.writeln('CHECKPOINT_DIR = "checkpoints"');
+    buffer.writeln();
+
+    buffer.writeln('# Random seed for reproducibility (set to None for random)');
+    buffer.writeln('RANDOM_SEED = ${_toPythonNullableInt(randomSeed)}');
+    buffer.writeln();
+
+    buffer.writeln('# Performance optimization');
+    buffer.writeln('USE_PARALLEL_EVALUATION = ${_toPythonBool(useParallelEvaluation)}  # Use multiprocessing for fitness evaluation');
+    buffer.writeln('MAX_PARALLEL_WORKERS = ${_toPythonNullableInt(maxParallelWorkers)}     # None = use all CPU cores, or specify number');
+
+    return buffer.toString();
+  }
+
+  /// Create a copy with modified fields
+  GeneticConfig copyWith({
+    String? databasePath,
+    String? testSymbol,
+    bool? usePortfolio,
+    int? portfolioSize,
+    List<String>? portfolioStocks,
+    bool? autoSelectPortfolio,
+    double? initialAllocationPct,
+    String? trainStartDate,
+    String? trainEndDate,
+    String? testStartDate,
+    String? testEndDate,
+    int? populationSize,
+    int? numGenerations,
+    double? mutationRate,
+    double? crossoverRate,
+    double? elitismPct,
+    int? tournamentSize,
+    double? initialCash,
+    double? commission,
+    Map<String, double>? fitnessWeights,
+    int? minTradesRequired,
+    bool? useParallelEvaluation,
+    int? maxParallelWorkers,
+    int? randomSeed,
+    bool? useMacroData,
+  }) {
+    return GeneticConfig(
+      databasePath: databasePath ?? this.databasePath,
+      testSymbol: testSymbol ?? this.testSymbol,
+      usePortfolio: usePortfolio ?? this.usePortfolio,
+      portfolioSize: portfolioSize ?? this.portfolioSize,
+      portfolioStocks: portfolioStocks ?? this.portfolioStocks,
+      autoSelectPortfolio: autoSelectPortfolio ?? this.autoSelectPortfolio,
+      initialAllocationPct: initialAllocationPct ?? this.initialAllocationPct,
+      trainStartDate: trainStartDate ?? this.trainStartDate,
+      trainEndDate: trainEndDate ?? this.trainEndDate,
+      testStartDate: testStartDate ?? this.testStartDate,
+      testEndDate: testEndDate ?? this.testEndDate,
+      populationSize: populationSize ?? this.populationSize,
+      numGenerations: numGenerations ?? this.numGenerations,
+      mutationRate: mutationRate ?? this.mutationRate,
+      crossoverRate: crossoverRate ?? this.crossoverRate,
+      elitismPct: elitismPct ?? this.elitismPct,
+      tournamentSize: tournamentSize ?? this.tournamentSize,
+      initialCash: initialCash ?? this.initialCash,
+      commission: commission ?? this.commission,
+      fitnessWeights: fitnessWeights ?? this.fitnessWeights,
+      minTradesRequired: minTradesRequired ?? this.minTradesRequired,
+      useParallelEvaluation:
+          useParallelEvaluation ?? this.useParallelEvaluation,
+      maxParallelWorkers: maxParallelWorkers ?? this.maxParallelWorkers,
+      randomSeed: randomSeed ?? this.randomSeed,
+      useMacroData: useMacroData ?? this.useMacroData,
+    );
+  }
+}
+
+/// Gene definition model
+class GeneDefinition {
+  final String name;
+  final double minValue;
+  final double maxValue;
+  final GeneType type;
+
+  const GeneDefinition({
+    required this.name,
+    required this.minValue,
+    required this.maxValue,
+    required this.type,
+  });
+}
+
+/// Gene data type
+enum GeneType { int, float, bool }

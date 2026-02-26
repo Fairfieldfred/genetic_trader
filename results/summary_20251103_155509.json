@@ -1,0 +1,51 @@
+{
+  "run_id": "20251103_155509",
+  "mode": "portfolio",
+  "symbol": null,
+  "portfolio_symbols": [
+    "OKE",
+    "BDX",
+    "ADP",
+    "SBNY",
+    "DXC",
+    "DHR",
+    "CTXS",
+    "BXP",
+    "RTX",
+    "BA",
+    "PKI",
+    "WHR",
+    "MDT"
+  ],
+  "portfolio_size": 13,
+  "initial_allocation_pct": 25.0,
+  "start_date": "2012-01-01",
+  "end_date": "2020-12-31",
+  "population_size": 45,
+  "num_generations": 20,
+  "best_trader": {
+    "generation": 19,
+    "fitness": 69.4961493874481,
+    "genes": {
+      "ma_short_period": 16,
+      "ma_long_period": 59,
+      "ma_type": 0,
+      "stop_loss_pct": 9.37189933128146,
+      "take_profit_pct": 13.66157568197154,
+      "position_size_pct": 24.145712055527365
+    },
+    "performance": {
+      "total_return": 161.25288068123248,
+      "sharpe_ratio": 1.4997261386456333,
+      "max_drawdown": -17.960997183700545,
+      "trade_count": 286,
+      "win_rate": 47.55244755244755
+    }
+  },
+  "benchmark": {
+    "buy_and_hold_return": 55.985918842112795,
+    "allocation_pct": 25.0,
+    "strategy_outperformance": 105.26696183911969,
+    "beats_benchmark": true
+  }
+}

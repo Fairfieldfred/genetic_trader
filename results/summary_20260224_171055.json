@@ -1,0 +1,73 @@
+{
+  "run_id": "20260224_171055",
+  "mode": "portfolio",
+  "symbol": null,
+  "portfolio_symbols": [
+    "ORCL",
+    "BEN",
+    "ADP",
+    "SCHW",
+    "EA",
+    "DISCA",
+    "CVX",
+    "C",
+    "SBNY",
+    "BAC",
+    "PM",
+    "WMB",
+    "MGM",
+    "ATVI",
+    "NDAQ",
+    "ICE",
+    "AES",
+    "AEP",
+    "AVY",
+    "CTSH"
+  ],
+  "portfolio_size": 20,
+  "initial_allocation_pct": 50.0,
+  "start_date": "2012-01-01",
+  "end_date": "2020-12-31",
+  "population_size": 50,
+  "num_generations": 20,
+  "best_trader": {
+    "generation": 19,
+    "fitness": 76.31102499002023,
+    "genes": {
+      "ma_short_period": 13,
+      "ma_long_period": 31,
+      "ma_type": 0,
+      "stop_loss_pct": 9.729432875966932,
+      "take_profit_pct": 11.68723800374161,
+      "position_size_pct": 23.5619156858237,
+      "macro_enabled": 1,
+      "macro_weight": 0.031707145726921016,
+      "macro_vix_threshold": 31.481510813097525,
+      "macro_vix_position_scale": 0.24430511751474243,
+      "macro_yc_threshold": 0.351113870987837,
+      "macro_yc_action": 0,
+      "macro_rate_threshold": 6.272661972701975,
+      "macro_rate_position_scale": 0.5725053789169464,
+      "macro_cpi_threshold": 2.3948931136258036,
+      "macro_cpi_position_scale": 0.9034016852140849,
+      "macro_unemp_threshold": 9.232715941233828,
+      "macro_unemp_action": 1,
+      "macro_risk_stop_adj": 1.818471694377727,
+      "macro_risk_tp_adj": 0.6931796717626897,
+      "macro_regime_count_req": 1
+    },
+    "performance": {
+      "total_return": 136.88841388561593,
+      "sharpe_ratio": 0.634246074903776,
+      "max_drawdown": -19.926428988925373,
+      "trade_count": 823,
+      "win_rate": 44.59295261239368
+    }
+  },
+  "benchmark": {
+    "buy_and_hold_return": 125.42737334841243,
+    "allocation_pct": 50.0,
+    "strategy_outperformance": 11.461040537203502,
+    "beats_benchmark": true
+  }
+}

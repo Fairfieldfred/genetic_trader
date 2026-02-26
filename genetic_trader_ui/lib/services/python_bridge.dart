@@ -1,0 +1,243 @@
+import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+
+/// Service for managing Python process execution
+class PythonBridge {
+  Process? _process;
+  final List<String> _outputLines = [];
+  bool _isRunning = false;
+
+  bool get isRunning => _isRunning;
+  List<String> get outputLines => List.unmodifiable(_outputLines);
+
+  /// Start the evolution process
+  Future<void> startEvolution({
+    required Function(String line) onOutput,
+    required Function(EvolutionProgress progress) onProgress,
+    required Function() onComplete,
+    required Function(String error) onError,
+  }) async {
+    if (_isRunning) {
+      onError('Evolution is already running');
+      return;
+    }
+
+    try {
+      // Use absolute path to the Genetic Trader directory
+      // macOS sandboxing means we can't use relative paths
+      const workingDir = '/Users/fred/Development/Genetic Trader';
+
+      if (kDebugMode) {
+        print('Starting evolution in: $workingDir');
+      }
+
+      // Check if evolve.py exists
+      final evolveFile = File('$workingDir/evolve.py');
+      if (!await evolveFile.exists()) {
+        onError('evolve.py not found at: $workingDir');
+        _isRunning = false;
+        return;
+      }
+
+      if (kDebugMode) {
+        print('Checking Python availability...');
+      }
+
+      // Check if Python is available
+      try {
+        final pythonCheck = await Process.run('which', ['python3']);
+        if (kDebugMode) {
+          print('Python3 path: ${pythonCheck.stdout}');
+        }
+      } catch (e) {
+        onError('Python3 not found. Please install Python 3.');
+        _isRunning = false;
+        return;
+      }
+
+      if (kDebugMode) {
+        print('Starting Python process...');
+      }
+
+      // Start the Python process with unbuffered output
+      _process = await Process.start(
+        'python3',
+        ['-u', 'evolve.py'],  // -u flag for unbuffered output
+        workingDirectory: workingDir,
+      );
+
+      if (kDebugMode) {
+        print('Python process started with PID: ${_process!.pid}');
+      }
+
+      _isRunning = true;
+      _outputLines.clear();
+
+      // Listen to stdout
+      _process!.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+        (line) {
+          _outputLines.add(line);
+          onOutput(line);
+
+          // Also print to debugger console
+          if (kDebugMode) {
+            print('[Python] $line');
+          }
+
+          // Parse progress
+          final progress = _parseProgress(line);
+          if (progress != null) {
+            onProgress(progress);
+          }
+        },
+        onDone: () {
+          _isRunning = false;
+          if (kDebugMode) {
+            print('[Python] Process completed');
+          }
+          onComplete();
+        },
+        onError: (error) {
+          _isRunning = false;
+          if (kDebugMode) {
+            print('[Python] Stream error: $error');
+          }
+          onError(error.toString());
+        },
+      );
+
+      // Listen to stderr
+      _process!.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(
+        (line) {
+          _outputLines.add('ERROR: $line');
+          onOutput('ERROR: $line');
+
+          // Also print to debugger console
+          if (kDebugMode) {
+            print('[Python ERROR] $line');
+          }
+
+          onError(line);
+        },
+      );
+
+      // Wait for exit
+      final exitCode = await _process!.exitCode;
+      _isRunning = false;
+
+      if (exitCode == 0) {
+        onComplete();
+      } else {
+        onError('Process exited with code $exitCode');
+      }
+    } catch (e) {
+      _isRunning = false;
+      onError('Failed to start evolution: $e');
+    }
+  }
+
+  /// Stop the evolution process
+  void stop() {
+    if (_process != null && _isRunning) {
+      _process!.kill();
+      _process = null;
+      _isRunning = false;
+    }
+  }
+
+  /// Parse progress information from output line
+  EvolutionProgress? _parseProgress(String line) {
+    // Parse lines like "Generation 15/40 (37%)"
+    final genRegex = RegExp(r'Generation\s+(\d+)/(\d+)');
+    final genMatch = genRegex.firstMatch(line);
+
+    if (genMatch != null) {
+      final current = int.parse(genMatch.group(1)!);
+      final total = int.parse(genMatch.group(2)!);
+      return EvolutionProgress(
+        currentGeneration: current,
+        totalGenerations: total,
+      );
+    }
+
+    // Parse fitness lines like "Best Fitness: 18.43"
+    final fitnessRegex = RegExp(r'Best Fitness:\s+([-\d.]+)');
+    final fitnessMatch = fitnessRegex.firstMatch(line);
+
+    if (fitnessMatch != null) {
+      final fitness = double.parse(fitnessMatch.group(1)!);
+      return EvolutionProgress(bestFitness: fitness);
+    }
+
+    // Parse average fitness
+    final avgFitnessRegex = RegExp(r'Average Fitness:\s+([-\d.]+)');
+    final avgMatch = avgFitnessRegex.firstMatch(line);
+
+    if (avgMatch != null) {
+      final avgFitness = double.parse(avgMatch.group(1)!);
+      return EvolutionProgress(avgFitness: avgFitness);
+    }
+
+    return null;
+  }
+
+  /// Clear output history
+  void clearOutput() {
+    _outputLines.clear();
+  }
+
+  /// Get the most recent output lines
+  List<String> getRecentOutput({int count = 100}) {
+    if (_outputLines.length <= count) {
+      return _outputLines;
+    }
+    return _outputLines.sublist(_outputLines.length - count);
+  }
+}
+
+/// Progress information parsed from evolution output
+class EvolutionProgress {
+  final int? currentGeneration;
+  final int? totalGenerations;
+  final double? bestFitness;
+  final double? avgFitness;
+  final double? worstFitness;
+
+  EvolutionProgress({
+    this.currentGeneration,
+    this.totalGenerations,
+    this.bestFitness,
+    this.avgFitness,
+    this.worstFitness,
+  });
+
+  double get progress {
+    if (currentGeneration != null && totalGenerations != null) {
+      return currentGeneration! / totalGenerations!;
+    }
+    return 0.0;
+  }
+
+  EvolutionProgress copyWith({
+    int? currentGeneration,
+    int? totalGenerations,
+    double? bestFitness,
+    double? avgFitness,
+    double? worstFitness,
+  }) {
+    return EvolutionProgress(
+      currentGeneration: currentGeneration ?? this.currentGeneration,
+      totalGenerations: totalGenerations ?? this.totalGenerations,
+      bestFitness: bestFitness ?? this.bestFitness,
+      avgFitness: avgFitness ?? this.avgFitness,
+      worstFitness: worstFitness ?? this.worstFitness,
+    );
+  }
+}
