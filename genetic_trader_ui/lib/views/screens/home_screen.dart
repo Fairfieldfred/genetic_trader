@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'config_screen.dart';
 import 'evolution_screen.dart';
+import 'results_list_screen.dart';
 
 /// Home screen with dashboard and quick actions
 class HomeScreen extends StatelessWidget {
@@ -129,7 +130,13 @@ class HomeScreen extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       onPressed: () {
-                        _showComingSoon(context, 'Results');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const ResultsListScreen(),
+                          ),
+                        );
                       },
                     ),
                     const SizedBox(height: 12),
@@ -200,12 +207,4 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  void _showComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature screen coming soon!'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
 }

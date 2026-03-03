@@ -48,8 +48,23 @@ class GeneticConfig {
   // Macroeconomic context
   bool useMacroData;
 
+  // Technical indicator filters
+  bool useTechnicalIndicators;
+
+  // Ensemble signals
+  bool useEnsembleSignals;
+
+  // K-Fold cross-validation
+  bool useKfoldValidation;
+  int kfoldNumFolds;
+  int kfoldFoldYears;
+  bool kfoldAllowOverlap;
+  bool kfoldWeightRecent;
+  double kfoldRecentWeightFactor;
+  int kfoldMinBarsPerFold;
+
   GeneticConfig({
-    this.databasePath = 'spy.db',
+    this.databasePath = '/Users/fred/alpaca_Big_polygon.db',
     this.testSymbol = 'AAPL',
     this.usePortfolio = true,
     this.portfolioSize = 20,
@@ -80,6 +95,15 @@ class GeneticConfig {
     this.maxParallelWorkers,
     this.randomSeed = 42,
     this.useMacroData = false,
+    this.useTechnicalIndicators = false,
+    this.useEnsembleSignals = false,
+    this.useKfoldValidation = false,
+    this.kfoldNumFolds = 2,
+    this.kfoldFoldYears = 3,
+    this.kfoldAllowOverlap = false,
+    this.kfoldWeightRecent = false,
+    this.kfoldRecentWeightFactor = 1.5,
+    this.kfoldMinBarsPerFold = 200,
   });
 
   /// Create config from JSON
@@ -110,6 +134,16 @@ class GeneticConfig {
       maxParallelWorkers: json['MAX_PARALLEL_WORKERS'],
       randomSeed: json['RANDOM_SEED'],
       useMacroData: json['USE_MACRO_DATA'] ?? false,
+      useTechnicalIndicators: json['USE_TECHNICAL_INDICATORS'] ?? false,
+      useEnsembleSignals: json['USE_ENSEMBLE_SIGNALS'] ?? false,
+      useKfoldValidation: json['USE_KFOLD_VALIDATION'] ?? false,
+      kfoldNumFolds: json['KFOLD_NUM_FOLDS'] ?? 2,
+      kfoldFoldYears: json['KFOLD_FOLD_YEARS'] ?? 3,
+      kfoldAllowOverlap: json['KFOLD_ALLOW_OVERLAP'] ?? false,
+      kfoldWeightRecent: json['KFOLD_WEIGHT_RECENT'] ?? false,
+      kfoldRecentWeightFactor:
+          (json['KFOLD_RECENT_WEIGHT_FACTOR'] ?? 1.5).toDouble(),
+      kfoldMinBarsPerFold: json['KFOLD_MIN_BARS_PER_FOLD'] ?? 200,
     );
   }
 
@@ -141,6 +175,15 @@ class GeneticConfig {
       'MAX_PARALLEL_WORKERS': maxParallelWorkers,
       'RANDOM_SEED': randomSeed,
       'USE_MACRO_DATA': useMacroData,
+      'USE_TECHNICAL_INDICATORS': useTechnicalIndicators,
+      'USE_ENSEMBLE_SIGNALS': useEnsembleSignals,
+      'USE_KFOLD_VALIDATION': useKfoldValidation,
+      'KFOLD_NUM_FOLDS': kfoldNumFolds,
+      'KFOLD_FOLD_YEARS': kfoldFoldYears,
+      'KFOLD_ALLOW_OVERLAP': kfoldAllowOverlap,
+      'KFOLD_WEIGHT_RECENT': kfoldWeightRecent,
+      'KFOLD_RECENT_WEIGHT_FACTOR': kfoldRecentWeightFactor,
+      'KFOLD_MIN_BARS_PER_FOLD': kfoldMinBarsPerFold,
     };
   }
 
@@ -185,6 +228,20 @@ class GeneticConfig {
     buffer.writeln('TRAIN_END_DATE = "$trainEndDate"');
     buffer.writeln('TEST_START_DATE = "$testStartDate"');
     buffer.writeln('TEST_END_DATE = "$testEndDate"');
+    buffer.writeln();
+
+    buffer.writeln('# K-Fold Temporal Cross-Validation');
+    buffer.writeln(
+        'USE_KFOLD_VALIDATION = ${_toPythonBool(useKfoldValidation)}');
+    buffer.writeln('KFOLD_NUM_FOLDS = $kfoldNumFolds');
+    buffer.writeln('KFOLD_FOLD_YEARS = $kfoldFoldYears');
+    buffer.writeln(
+        'KFOLD_ALLOW_OVERLAP = ${_toPythonBool(kfoldAllowOverlap)}');
+    buffer.writeln(
+        'KFOLD_WEIGHT_RECENT = ${_toPythonBool(kfoldWeightRecent)}');
+    buffer.writeln(
+        'KFOLD_RECENT_WEIGHT_FACTOR = $kfoldRecentWeightFactor');
+    buffer.writeln('KFOLD_MIN_BARS_PER_FOLD = $kfoldMinBarsPerFold');
     buffer.writeln();
 
     buffer.writeln('# Genetic algorithm configuration');
@@ -250,6 +307,66 @@ class GeneticConfig {
           '    \'macro_regime_count_req\': (1, 4, int),');
     }
 
+    if (useTechnicalIndicators) {
+      buffer.writeln();
+      buffer.writeln('    # Technical Indicator filter genes');
+      buffer.writeln(
+          '    \'ti_enabled\': (0, 1, int),');
+      buffer.writeln(
+          '    \'ti_weight\': (0.0, 1.0, float),');
+      buffer.writeln(
+          '    \'ti_rsi_overbought\': (60, 90, int),');
+      buffer.writeln(
+          '    \'ti_rsi_oversold\': (10, 40, int),');
+      buffer.writeln(
+          '    \'ti_adx_threshold\': (15, 40, int),');
+      buffer.writeln(
+          '    \'ti_adx_position_scale\': (0.2, 1.0, float),');
+      buffer.writeln(
+          '    \'ti_natr_threshold\': (2.0, 8.0, float),');
+      buffer.writeln(
+          '    \'ti_natr_risk_action\': (0, 2, int),');
+      buffer.writeln(
+          '    \'ti_mfi_overbought\': (70, 95, int),');
+      buffer.writeln(
+          '    \'ti_mfi_oversold\': (5, 30, int),');
+      buffer.writeln(
+          '    \'ti_macdhist_confirm\': (0, 1, int),');
+      buffer.writeln(
+          '    \'ti_macdhist_exit_confirm\': (0, 1, int),');
+    }
+
+    if (useEnsembleSignals) {
+      buffer.writeln();
+      buffer.writeln('    # Ensemble Signal genes');
+      buffer.writeln(
+          '    \'ensemble_enabled\': (0, 1, int),');
+      buffer.writeln(
+          '    \'sig_ma_weight\': (0.0, 1.0, float),');
+      buffer.writeln(
+          '    \'sig_bb_weight\': (0.0, 1.0, float),');
+      buffer.writeln(
+          '    \'sig_stoch_weight\': (0.0, 1.0, float),');
+      buffer.writeln(
+          '    \'sig_macd_weight\': (0.0, 1.0, float),');
+      buffer.writeln(
+          '    \'sig_rsi_weight\': (0.0, 1.0, float),');
+      buffer.writeln(
+          '    \'sig_buy_threshold\': (0.1, 0.8, float),');
+      buffer.writeln(
+          '    \'sig_sell_threshold\': (-0.8, -0.1, float),');
+      buffer.writeln(
+          '    \'sig_bb_period_idx\': (0, 2, int),');
+      buffer.writeln(
+          '    \'sig_stoch_ob\': (70, 90, int),');
+      buffer.writeln(
+          '    \'sig_stoch_os\': (10, 30, int),');
+      buffer.writeln(
+          '    \'sig_rsi_ob\': (60, 85, int),');
+      buffer.writeln(
+          '    \'sig_rsi_os\': (15, 40, int),');
+    }
+
     buffer.writeln('}');
     buffer.writeln();
 
@@ -280,6 +397,37 @@ class GeneticConfig {
       buffer.writeln('    \'macro_regime_count_req\',');
     }
 
+    if (useTechnicalIndicators) {
+      buffer.writeln('    \'ti_enabled\',');
+      buffer.writeln('    \'ti_weight\',');
+      buffer.writeln('    \'ti_rsi_overbought\',');
+      buffer.writeln('    \'ti_rsi_oversold\',');
+      buffer.writeln('    \'ti_adx_threshold\',');
+      buffer.writeln('    \'ti_adx_position_scale\',');
+      buffer.writeln('    \'ti_natr_threshold\',');
+      buffer.writeln('    \'ti_natr_risk_action\',');
+      buffer.writeln('    \'ti_mfi_overbought\',');
+      buffer.writeln('    \'ti_mfi_oversold\',');
+      buffer.writeln('    \'ti_macdhist_confirm\',');
+      buffer.writeln('    \'ti_macdhist_exit_confirm\',');
+    }
+
+    if (useEnsembleSignals) {
+      buffer.writeln('    \'ensemble_enabled\',');
+      buffer.writeln('    \'sig_ma_weight\',');
+      buffer.writeln('    \'sig_bb_weight\',');
+      buffer.writeln('    \'sig_stoch_weight\',');
+      buffer.writeln('    \'sig_macd_weight\',');
+      buffer.writeln('    \'sig_rsi_weight\',');
+      buffer.writeln('    \'sig_buy_threshold\',');
+      buffer.writeln('    \'sig_sell_threshold\',');
+      buffer.writeln('    \'sig_bb_period_idx\',');
+      buffer.writeln('    \'sig_stoch_ob\',');
+      buffer.writeln('    \'sig_stoch_os\',');
+      buffer.writeln('    \'sig_rsi_ob\',');
+      buffer.writeln('    \'sig_rsi_os\',');
+    }
+
     buffer.writeln(']');
     buffer.writeln();
 
@@ -287,6 +435,16 @@ class GeneticConfig {
     buffer.writeln(
         'USE_MACRO_DATA = ${_toPythonBool(useMacroData)}');
     buffer.writeln("MACRO_DATA_TABLE = 'macro_indicators'");
+    buffer.writeln();
+
+    buffer.writeln('# Technical indicator filter configuration');
+    buffer.writeln(
+        'USE_TECHNICAL_INDICATORS = ${_toPythonBool(useTechnicalIndicators)}');
+    buffer.writeln();
+
+    buffer.writeln('# Ensemble signal configuration');
+    buffer.writeln(
+        'USE_ENSEMBLE_SIGNALS = ${_toPythonBool(useEnsembleSignals)}');
     buffer.writeln();
 
     buffer.writeln('# Backtrader configuration');
@@ -363,6 +521,15 @@ class GeneticConfig {
     int? maxParallelWorkers,
     int? randomSeed,
     bool? useMacroData,
+    bool? useTechnicalIndicators,
+    bool? useEnsembleSignals,
+    bool? useKfoldValidation,
+    int? kfoldNumFolds,
+    int? kfoldFoldYears,
+    bool? kfoldAllowOverlap,
+    bool? kfoldWeightRecent,
+    double? kfoldRecentWeightFactor,
+    int? kfoldMinBarsPerFold,
   }) {
     return GeneticConfig(
       databasePath: databasePath ?? this.databasePath,
@@ -391,6 +558,22 @@ class GeneticConfig {
       maxParallelWorkers: maxParallelWorkers ?? this.maxParallelWorkers,
       randomSeed: randomSeed ?? this.randomSeed,
       useMacroData: useMacroData ?? this.useMacroData,
+      useTechnicalIndicators:
+          useTechnicalIndicators ?? this.useTechnicalIndicators,
+      useEnsembleSignals:
+          useEnsembleSignals ?? this.useEnsembleSignals,
+      useKfoldValidation:
+          useKfoldValidation ?? this.useKfoldValidation,
+      kfoldNumFolds: kfoldNumFolds ?? this.kfoldNumFolds,
+      kfoldFoldYears: kfoldFoldYears ?? this.kfoldFoldYears,
+      kfoldAllowOverlap:
+          kfoldAllowOverlap ?? this.kfoldAllowOverlap,
+      kfoldWeightRecent:
+          kfoldWeightRecent ?? this.kfoldWeightRecent,
+      kfoldRecentWeightFactor:
+          kfoldRecentWeightFactor ?? this.kfoldRecentWeightFactor,
+      kfoldMinBarsPerFold:
+          kfoldMinBarsPerFold ?? this.kfoldMinBarsPerFold,
     );
   }
 }

@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Flutter Clean and Get",
+            "type": "shell",
+            "command": "flutter clean && flutter pub get",
+            "options": {
+                "cwd": "${workspaceFolder}/genetic_trader_ui"
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

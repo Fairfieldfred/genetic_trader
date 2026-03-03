@@ -61,34 +61,56 @@ class ConfigScreen extends StatelessWidget {
                 icon: Icons.account_balance_wallet,
                 children: [
                   SwitchListTile(
-                    title: const Text('Use Portfolio Mode'),
-                    subtitle: const Text('Trade multiple stocks simultaneously'),
-                    value: config.usePortfolio,
+                    title: const Text('Auto-Select Stocks'),
+                    subtitle: Text(
+                      config.autoSelectPortfolio
+                          ? 'Randomly select stocks from '
+                              'database'
+                          : 'Specify stocks manually',
+                    ),
+                    value: config.autoSelectPortfolio,
                     onChanged: (value) {
-                      viewModel.updateUsePortfolio(value);
+                      viewModel.updateAutoSelectPortfolio(
+                        value,
+                      );
                     },
                   ),
-                  _buildSliderTile(
-                    context,
-                    title: 'Portfolio Size',
-                    value: config.portfolioSize.toDouble(),
-                    min: 1,
-                    max: 50,
-                    divisions: 49,
-                    label: '${config.portfolioSize} stocks',
-                    onChanged: (value) {
-                      viewModel.updatePortfolioSize(value.toInt());
-                    },
-                  ),
+                  if (config.autoSelectPortfolio)
+                    _buildSliderTile(
+                      context,
+                      title: 'Portfolio Size',
+                      value: config.portfolioSize.toDouble(),
+                      min: 1,
+                      max: 50,
+                      divisions: 49,
+                      label: '${config.portfolioSize} stocks',
+                      onChanged: (value) {
+                        viewModel.updatePortfolioSize(
+                          value.toInt(),
+                        );
+                      },
+                    ),
+                  if (!config.autoSelectPortfolio)
+                    _StockInputField(
+                      stocks: config.portfolioStocks,
+                      onChanged: (stocks) {
+                        viewModel.updatePortfolioStocks(stocks);
+                        viewModel.updatePortfolioSize(
+                          stocks.isEmpty ? 1 : stocks.length,
+                        );
+                      },
+                    ),
                   _buildSliderTile(
                     context,
                     title: 'Initial Allocation',
-                    subtitle: 'Percentage of capital to allocate at start',
+                    subtitle: 'Percentage of capital to '
+                        'allocate at start',
                     value: config.initialAllocationPct,
                     min: 0,
                     max: 100,
                     divisions: 20,
-                    label: '${config.initialAllocationPct.toInt()}%',
+                    label:
+                        '${config.initialAllocationPct.toInt()}%',
                     onChanged: (value) {
                       viewModel.updateInitialAllocation(value);
                     },
@@ -148,6 +170,247 @@ class ConfigScreen extends StatelessWidget {
                         'Run populate_macro_data.py or '
                         'import_macro_csv.py to load macro '
                         'data into the database first.',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Technical Indicator Filters
+              _buildSection(
+                context,
+                title: 'Technical Indicator Filters',
+                icon: Icons.analytics,
+                children: [
+                  SwitchListTile(
+                    title: const Text('Enable TI Filters'),
+                    subtitle: const Text(
+                      'Add per-stock indicator genes to the chromosome',
+                    ),
+                    value: config.useTechnicalIndicators,
+                    onChanged: (value) {
+                      viewModel.updateUseTechnicalIndicators(value);
+                    },
+                  ),
+                  if (config.useTechnicalIndicators) ...[
+                    ListTile(
+                      leading: Icon(
+                        Icons.check_circle,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      title: const Text('Indicators'),
+                      subtitle: const Text(
+                        'RSI, ADX, NATR, MFI, MACD Histogram',
+                      ),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.info_outline,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                      title: const Text('Gene Impact'),
+                      subtitle: Text(
+                        '+12 TI genes added to chromosome '
+                        '(${config.useMacroData ? 33 : 18} total). '
+                        'Genes filter buys by momentum, trend '
+                        'strength, volatility, and volume.',
+                      ),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.warning_amber,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      title: const Text('Data Required'),
+                      subtitle: const Text(
+                        'Database must contain rsi, adx, natr, '
+                        'mfi, macdhist columns in daily_indicators.',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Ensemble Signals
+              _buildSection(
+                context,
+                title: 'Ensemble Signals',
+                icon: Icons.merge_type,
+                children: [
+                  SwitchListTile(
+                    title: const Text('Enable Ensemble Signals'),
+                    subtitle: const Text(
+                      'Combine multiple signal generators '
+                      'with evolved weights',
+                    ),
+                    value: config.useEnsembleSignals,
+                    onChanged: (value) {
+                      viewModel.updateUseEnsembleSignals(value);
+                    },
+                  ),
+                  if (config.useEnsembleSignals) ...[
+                    ListTile(
+                      leading: Icon(
+                        Icons.check_circle,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      title: const Text('Signal Sources'),
+                      subtitle: const Text(
+                        'MA Crossover, Bollinger Bands, '
+                        'Stochastic, MACD, RSI',
+                      ),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.info_outline,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                      title: const Text('Gene Impact'),
+                      subtitle: const Text(
+                        '+13 ensemble genes added to chromosome. '
+                        'Genes control signal weights, buy/sell '
+                        'thresholds, and per-signal parameters.',
+                      ),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.warning_amber,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                      title: const Text('Data Required'),
+                      subtitle: const Text(
+                        'Database must contain bb_top, bb_mid, '
+                        'bb_bot, slowk, slowd, macd, signal '
+                        'columns in daily_indicators.',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // K-Fold Cross-Validation
+              _buildSection(
+                context,
+                title: 'K-Fold Cross-Validation',
+                icon: Icons.view_timeline,
+                children: [
+                  SwitchListTile(
+                    title: const Text('Enable K-Fold CV'),
+                    subtitle: const Text(
+                      'Split training period into multiple '
+                      'folds for more robust evaluation',
+                    ),
+                    value: config.useKfoldValidation,
+                    onChanged: (value) {
+                      viewModel.updateUseKfoldValidation(value);
+                    },
+                  ),
+                  if (config.useKfoldValidation) ...[
+                    _buildSliderTile(
+                      context,
+                      title: 'Number of Folds',
+                      subtitle: 'How many time windows to '
+                          'evaluate',
+                      value: config.kfoldNumFolds.toDouble(),
+                      min: 2,
+                      max: 7,
+                      divisions: 5,
+                      label: '${config.kfoldNumFolds} folds',
+                      onChanged: (value) {
+                        viewModel.updateKfoldNumFolds(
+                          value.toInt(),
+                        );
+                      },
+                    ),
+                    _buildSliderTile(
+                      context,
+                      title: 'Years Per Fold',
+                      subtitle: 'Duration of each time window',
+                      value: config.kfoldFoldYears.toDouble(),
+                      min: 1,
+                      max: 5,
+                      divisions: 4,
+                      label: '${config.kfoldFoldYears} years',
+                      onChanged: (value) {
+                        viewModel.updateKfoldFoldYears(
+                          value.toInt(),
+                        );
+                      },
+                    ),
+                    SwitchListTile(
+                      title: const Text(
+                        'Allow Overlapping Folds',
+                      ),
+                      subtitle: const Text(
+                        'Sliding window — folds can share '
+                        'data for more coverage',
+                      ),
+                      value: config.kfoldAllowOverlap,
+                      onChanged: (value) {
+                        viewModel.updateKfoldAllowOverlap(
+                          value,
+                        );
+                      },
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.info_outline,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .secondary,
+                      ),
+                      title: const Text('Fold Preview'),
+                      subtitle: Text(
+                        _computeFoldPreview(config),
+                      ),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Weight Recent Folds'),
+                      subtitle: const Text(
+                        'Give more importance to recent '
+                        'time periods',
+                      ),
+                      value: config.kfoldWeightRecent,
+                      onChanged: (value) {
+                        viewModel.updateKfoldWeightRecent(
+                          value,
+                        );
+                      },
+                    ),
+                    if (config.kfoldWeightRecent)
+                      _buildSliderTile(
+                        context,
+                        title: 'Recent Weight Factor',
+                        subtitle: 'Extra weight for the last '
+                            'fold',
+                        value: config.kfoldRecentWeightFactor,
+                        min: 1.0,
+                        max: 3.0,
+                        divisions: 20,
+                        label: config.kfoldRecentWeightFactor
+                            .toStringAsFixed(1),
+                        onChanged: (value) {
+                          viewModel
+                              .updateKfoldRecentWeightFactor(
+                            value,
+                          );
+                        },
+                      ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.warning_amber,
+                        color:
+                            Theme.of(context).colorScheme.error,
+                      ),
+                      title: const Text('Performance Impact'),
+                      subtitle: Text(
+                        '${_computeNumFolds(config)} folds = '
+                        '${_computeNumFolds(config)}x more '
+                        'backtests per trader. Parallel '
+                        'evaluation is recommended.',
                       ),
                     ),
                   ],
@@ -416,6 +679,75 @@ class ConfigScreen extends StatelessWidget {
         .join(' ');
   }
 
+  int _computeNumFolds(config) {
+    final start = DateTime.tryParse(config.trainStartDate);
+    final end = DateTime.tryParse(config.trainEndDate);
+    if (start == null || end == null) return 1;
+    final totalDays = end.difference(start).inDays;
+    final foldDays = (config.kfoldFoldYears * 365.25).toInt();
+    if (foldDays <= 0) return 1;
+
+    var numFolds = config.kfoldNumFolds as int;
+    if (!config.kfoldAllowOverlap) {
+      final maxFolds = totalDays ~/ foldDays;
+      numFolds = numFolds.clamp(1, maxFolds.clamp(1, 7));
+    }
+    return numFolds;
+  }
+
+  String _computeFoldPreview(config) {
+    final start = DateTime.tryParse(config.trainStartDate);
+    final end = DateTime.tryParse(config.trainEndDate);
+    if (start == null || end == null) return 'Invalid date range';
+
+    final totalDays = end.difference(start).inDays;
+    var foldDays = (config.kfoldFoldYears * 365.25).toInt();
+    if (foldDays <= 0) return 'Invalid fold size';
+    foldDays = foldDays.clamp(1, totalDays);
+
+    var numFolds = config.kfoldNumFolds as int;
+    final allowOverlap = config.kfoldAllowOverlap as bool;
+
+    double stride;
+    if (allowOverlap) {
+      stride = numFolds > 1
+          ? (totalDays - foldDays) / (numFolds - 1)
+          : totalDays.toDouble();
+    } else {
+      stride = foldDays.toDouble();
+      final maxFolds = totalDays ~/ foldDays;
+      numFolds = numFolds.clamp(1, maxFolds.clamp(1, 7));
+    }
+
+    final folds = <String>[];
+    for (var i = 0; i < numFolds; i++) {
+      final foldStart = start.add(
+        Duration(days: (i * stride).toInt()),
+      );
+      var foldEnd = foldStart.add(
+        Duration(days: foldDays - 1),
+      );
+      if (foldEnd.isAfter(end)) foldEnd = end;
+      folds.add(
+        'Fold ${i + 1}: '
+        '${_fmtDate(foldStart)} - ${_fmtDate(foldEnd)}',
+      );
+    }
+
+    if (!allowOverlap && config.kfoldNumFolds > numFolds) {
+      folds.add(
+        '(Capped from ${config.kfoldNumFolds} to '
+        '$numFolds — not enough data for '
+        'non-overlapping folds)',
+      );
+    }
+
+    return folds.join('\n');
+  }
+
+  String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}';
+
   void _showResetDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -478,6 +810,126 @@ class ConfigScreen extends StatelessWidget {
             },
             child: const Text('Save'),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Input field for manually entering stock symbols
+class _StockInputField extends StatefulWidget {
+  final List<String> stocks;
+  final ValueChanged<List<String>> onChanged;
+
+  const _StockInputField({
+    required this.stocks,
+    required this.onChanged,
+  });
+
+  @override
+  State<_StockInputField> createState() => _StockInputFieldState();
+}
+
+class _StockInputFieldState extends State<_StockInputField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _addSymbols(String text) {
+    final newSymbols = text
+        .split(RegExp(r'[,\s]+'))
+        .map((s) => s.trim().toUpperCase())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (newSymbols.isEmpty) return;
+
+    final updated = List<String>.from(widget.stocks);
+    for (final sym in newSymbols) {
+      if (!updated.contains(sym)) {
+        updated.add(sym);
+      }
+    }
+    _controller.clear();
+    widget.onChanged(updated);
+  }
+
+  void _removeSymbol(String symbol) {
+    final updated = List<String>.from(widget.stocks)
+      ..remove(symbol);
+    widget.onChanged(updated);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 8,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              labelText: 'Add stock symbols',
+              hintText: 'e.g. AAPL, MSFT, GOOG',
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.add),
+                onPressed: () => _addSymbols(
+                  _controller.text,
+                ),
+              ),
+            ),
+            onSubmitted: _addSymbols,
+          ),
+          const SizedBox(height: 8),
+          if (widget.stocks.isNotEmpty) ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: widget.stocks
+                  .map(
+                    (sym) => Chip(
+                      label: Text(sym),
+                      deleteIcon: const Icon(
+                        Icons.close,
+                        size: 16,
+                      ),
+                      onDeleted: () => _removeSymbol(sym),
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${widget.stocks.length} stock'
+              '${widget.stocks.length == 1 ? '' : 's'}'
+              ' selected',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ] else
+            Text(
+              'No stocks added yet',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
         ],
       ),
     );

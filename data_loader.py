@@ -1,21 +1,31 @@
 """
 Data loader module for genetic trading system.
-Loads stock data from spy.db SQLite database into pandas DataFrames
-formatted for Backtrader.
+Loads stock data from SQLite databases into pandas DataFrames
+formatted for Backtrader. Supports both spy.db and alpaca_Big_polygon.db schemas.
 """
 
 import sqlite3
 import pandas as pd
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 
 class DataLoader:
     """Handles loading and formatting stock and macro data for backtesting."""
 
+    # Technical indicator columns to load when available
+    TI_COLUMNS = [
+        'rsi', 'adx', 'natr', 'mfi', 'macd', 'signal', 'macdhist',
+        # Ensemble signal columns
+        'bb_top', 'bb_mid', 'bb_bot', 'slowk', 'slowd',
+    ]
+
     def __init__(self, db_path: str = "spy.db"):
         """
         Initialize the data loader.
+
+        Auto-detects the database schema to support both spy.db
+        and alpaca_Big_polygon.db layouts.
 
         Args:
             db_path: Path to the SQLite database file
@@ -23,6 +33,38 @@ class DataLoader:
         self.db_path = Path(db_path)
         if not self.db_path.exists():
             raise FileNotFoundError(f"Database not found: {db_path}")
+
+        self._available_columns: Optional[Set[str]] = None
+        self._has_stocks_table: Optional[bool] = None
+
+    def _get_available_columns(self) -> Set[str]:
+        """Cache and return the set of columns in daily_indicators."""
+        if self._available_columns is None:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA table_info(daily_indicators)")
+                self._available_columns = {
+                    row[1] for row in cursor.fetchall()
+                }
+            finally:
+                conn.close()
+        return self._available_columns
+
+    def _has_stocks(self) -> bool:
+        """Check if a separate 'stocks' table exists (alpaca DB layout)."""
+        if self._has_stocks_table is None:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND name='stocks'"
+                )
+                self._has_stocks_table = cursor.fetchone() is not None
+            finally:
+                conn.close()
+        return self._has_stocks_table
 
     def load_stock_data(
         self,
@@ -33,29 +75,33 @@ class DataLoader:
         """
         Load stock data for a given symbol.
 
+        Automatically includes available technical indicator columns
+        (rsi, adx, natr, mfi, macd, signal, macdhist) when present.
+
         Args:
             symbol: Stock ticker symbol (e.g., 'AAPL')
             start_date: Start date in YYYY-MM-DD format (optional)
             end_date: End date in YYYY-MM-DD format (optional)
 
         Returns:
-            DataFrame with datetime index and OHLCV columns for Backtrader
+            DataFrame with datetime index and OHLCV + indicator columns
         """
+        available = self._get_available_columns()
+
+        # Base OHLCV columns (always required)
+        select_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
+
+        # Add available technical indicator columns
+        for col in self.TI_COLUMNS:
+            if col in available:
+                select_cols.append(col)
+
+        cols_str = ', '.join(select_cols)
+
         conn = sqlite3.connect(self.db_path)
 
-        # Build query with optional date filtering
-        query = """
-            SELECT
-                date,
-                open,
-                high,
-                low,
-                close,
-                volume,
-                rsi,
-                macd,
-                signal,
-                macdhist
+        query = f"""
+            SELECT {cols_str}
             FROM daily_indicators
             WHERE symbol = ?
         """
@@ -84,7 +130,9 @@ class DataLoader:
 
             # Ensure all required columns are present
             required_cols = ['open', 'high', 'low', 'close', 'volume']
-            missing_cols = [col for col in required_cols if col not in df.columns]
+            missing_cols = [
+                col for col in required_cols if col not in df.columns
+            ]
             if missing_cols:
                 raise ValueError(f"Missing required columns: {missing_cols}")
 
@@ -216,38 +264,71 @@ class DataLoader:
         """
         Get information about available data for a symbol.
 
+        Adapts to database schema — uses 'stocks' table for name/sector
+        when daily_indicators lacks those columns (alpaca DB layout).
+
         Args:
             symbol: Stock ticker symbol
 
         Returns:
-            Dictionary with data statistics
+            Dictionary with data statistics, or None if symbol not found
         """
+        available = self._get_available_columns()
+        has_name_sector = 'name' in available and 'sector' in available
+
         conn = sqlite3.connect(self.db_path)
 
         try:
-            query = """
-                SELECT
-                    COUNT(*) as record_count,
-                    MIN(date) as start_date,
-                    MAX(date) as end_date,
-                    name,
-                    sector
-                FROM daily_indicators
-                WHERE symbol = ?
-            """
+            if has_name_sector:
+                query = """
+                    SELECT
+                        COUNT(*) as record_count,
+                        MIN(date) as start_date,
+                        MAX(date) as end_date,
+                        name,
+                        sector
+                    FROM daily_indicators
+                    WHERE symbol = ?
+                """
+            elif self._has_stocks():
+                query = """
+                    SELECT
+                        COUNT(*) as record_count,
+                        MIN(di.date) as start_date,
+                        MAX(di.date) as end_date,
+                        s.name,
+                        s.exchange as sector
+                    FROM daily_indicators di
+                    JOIN stocks s ON di.symbol = s.symbol
+                    WHERE di.symbol = ?
+                """
+            else:
+                query = """
+                    SELECT
+                        COUNT(*) as record_count,
+                        MIN(date) as start_date,
+                        MAX(date) as end_date
+                    FROM daily_indicators
+                    WHERE symbol = ?
+                """
+
             df = pd.read_sql_query(query, conn, params=[symbol])
 
             if df.empty or df['record_count'].iloc[0] == 0:
                 return None
 
-            return {
+            result = {
                 'symbol': symbol,
-                'name': df['name'].iloc[0],
-                'sector': df['sector'].iloc[0],
                 'records': int(df['record_count'].iloc[0]),
                 'start_date': df['start_date'].iloc[0],
                 'end_date': df['end_date'].iloc[0]
             }
+
+            if 'name' in df.columns:
+                result['name'] = df['name'].iloc[0]
+                result['sector'] = df['sector'].iloc[0]
+
+            return result
 
         finally:
             conn.close()

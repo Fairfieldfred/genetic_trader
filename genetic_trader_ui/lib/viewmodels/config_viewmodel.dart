@@ -24,6 +24,11 @@ class ConfigViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateAutoSelectPortfolio(bool value) {
+    _config = _config.copyWith(autoSelectPortfolio: value);
+    notifyListeners();
+  }
+
   void updatePortfolioStocks(List<String> stocks) {
     _config = _config.copyWith(portfolioStocks: stocks);
     notifyListeners();
@@ -112,6 +117,54 @@ class ConfigViewModel extends ChangeNotifier {
   // Macroeconomic Context
   void updateUseMacroData(bool value) {
     _config = _config.copyWith(useMacroData: value);
+    notifyListeners();
+  }
+
+  // Technical Indicator Filters
+  void updateUseTechnicalIndicators(bool value) {
+    _config = _config.copyWith(useTechnicalIndicators: value);
+    notifyListeners();
+  }
+
+  // Ensemble Signals
+  void updateUseEnsembleSignals(bool value) {
+    _config = _config.copyWith(useEnsembleSignals: value);
+    notifyListeners();
+  }
+
+  // K-Fold Cross-Validation
+  void updateUseKfoldValidation(bool value) {
+    _config = _config.copyWith(useKfoldValidation: value);
+    notifyListeners();
+  }
+
+  void updateKfoldNumFolds(int value) {
+    _config = _config.copyWith(kfoldNumFolds: value);
+    notifyListeners();
+  }
+
+  void updateKfoldFoldYears(int years) {
+    _config = _config.copyWith(kfoldFoldYears: years);
+    notifyListeners();
+  }
+
+  void updateKfoldAllowOverlap(bool value) {
+    _config = _config.copyWith(kfoldAllowOverlap: value);
+    notifyListeners();
+  }
+
+  void updateKfoldWeightRecent(bool value) {
+    _config = _config.copyWith(kfoldWeightRecent: value);
+    notifyListeners();
+  }
+
+  void updateKfoldRecentWeightFactor(double factor) {
+    _config = _config.copyWith(kfoldRecentWeightFactor: factor);
+    notifyListeners();
+  }
+
+  void updateKfoldMinBarsPerFold(int bars) {
+    _config = _config.copyWith(kfoldMinBarsPerFold: bars);
     notifyListeners();
   }
 

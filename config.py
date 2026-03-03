@@ -4,15 +4,16 @@ Auto-generated from Flutter UI.
 """
 
 # Database configuration
-DATABASE_PATH = "spy.db"
+DATABASE_PATH = "/Users/fred/alpaca_Big_polygon.db"
 TEST_SYMBOL = "AAPL"
 
 # Multi-stock portfolio configuration
 USE_PORTFOLIO = True
-PORTFOLIO_SIZE = 20
+PORTFOLIO_SIZE = 1
 PORTFOLIO_STOCKS = [
+    "GOOG",
 ]
-AUTO_SELECT_PORTFOLIO = True
+AUTO_SELECT_PORTFOLIO = False
 
 # Data split configuration
 TRAIN_START_DATE = "2012-01-01"
@@ -20,12 +21,21 @@ TRAIN_END_DATE = "2020-12-31"
 TEST_START_DATE = "2021-01-01"
 TEST_END_DATE = "2023-12-31"
 
+# K-Fold Temporal Cross-Validation
+USE_KFOLD_VALIDATION = True
+KFOLD_NUM_FOLDS = 5
+KFOLD_FOLD_YEARS = 3
+KFOLD_ALLOW_OVERLAP = True
+KFOLD_WEIGHT_RECENT = False
+KFOLD_RECENT_WEIGHT_FACTOR = 1.5
+KFOLD_MIN_BARS_PER_FOLD = 200
+
 # Genetic algorithm configuration
-POPULATION_SIZE = 50
-NUM_GENERATIONS = 20
-MUTATION_RATE = 0.25
-CROSSOVER_RATE = 0.8
-ELITISM_COUNT = 10  # 20.0% of population
+POPULATION_SIZE = 100
+NUM_GENERATIONS = 200
+MUTATION_RATE = 0.3
+CROSSOVER_RATE = 0.9
+ELITISM_COUNT = 30  # 30.0% of population
 
 # Tournament selection
 TOURNAMENT_SIZE = 4
@@ -59,6 +69,35 @@ GENE_DEFINITIONS = {
     'macro_risk_stop_adj': (0.5, 2.0, float),
     'macro_risk_tp_adj': (0.5, 2.0, float),
     'macro_regime_count_req': (1, 4, int),
+
+    # Technical Indicator filter genes
+    'ti_enabled': (0, 1, int),
+    'ti_weight': (0.0, 1.0, float),
+    'ti_rsi_overbought': (60, 90, int),
+    'ti_rsi_oversold': (10, 40, int),
+    'ti_adx_threshold': (15, 40, int),
+    'ti_adx_position_scale': (0.2, 1.0, float),
+    'ti_natr_threshold': (2.0, 8.0, float),
+    'ti_natr_risk_action': (0, 2, int),
+    'ti_mfi_overbought': (70, 95, int),
+    'ti_mfi_oversold': (5, 30, int),
+    'ti_macdhist_confirm': (0, 1, int),
+    'ti_macdhist_exit_confirm': (0, 1, int),
+
+    # Ensemble Signal genes
+    'ensemble_enabled': (0, 1, int),
+    'sig_ma_weight': (0.0, 1.0, float),
+    'sig_bb_weight': (0.0, 1.0, float),
+    'sig_stoch_weight': (0.0, 1.0, float),
+    'sig_macd_weight': (0.0, 1.0, float),
+    'sig_rsi_weight': (0.0, 1.0, float),
+    'sig_buy_threshold': (0.1, 0.8, float),
+    'sig_sell_threshold': (-0.8, -0.1, float),
+    'sig_bb_period_idx': (0, 2, int),
+    'sig_stoch_ob': (70, 90, int),
+    'sig_stoch_os': (10, 30, int),
+    'sig_rsi_ob': (60, 85, int),
+    'sig_rsi_os': (15, 40, int),
 }
 
 # Gene order in chromosome (important for consistency)
@@ -84,11 +123,42 @@ GENE_ORDER = [
     'macro_risk_stop_adj',
     'macro_risk_tp_adj',
     'macro_regime_count_req',
+    'ti_enabled',
+    'ti_weight',
+    'ti_rsi_overbought',
+    'ti_rsi_oversold',
+    'ti_adx_threshold',
+    'ti_adx_position_scale',
+    'ti_natr_threshold',
+    'ti_natr_risk_action',
+    'ti_mfi_overbought',
+    'ti_mfi_oversold',
+    'ti_macdhist_confirm',
+    'ti_macdhist_exit_confirm',
+    'ensemble_enabled',
+    'sig_ma_weight',
+    'sig_bb_weight',
+    'sig_stoch_weight',
+    'sig_macd_weight',
+    'sig_rsi_weight',
+    'sig_buy_threshold',
+    'sig_sell_threshold',
+    'sig_bb_period_idx',
+    'sig_stoch_ob',
+    'sig_stoch_os',
+    'sig_rsi_ob',
+    'sig_rsi_os',
 ]
 
 # Macroeconomic data configuration
 USE_MACRO_DATA = True
 MACRO_DATA_TABLE = 'macro_indicators'
+
+# Technical indicator filter configuration
+USE_TECHNICAL_INDICATORS = True
+
+# Ensemble signal configuration
+USE_ENSEMBLE_SIGNALS = True
 
 # Backtrader configuration
 INITIAL_CASH = 100000.0
@@ -98,14 +168,14 @@ COMMISSION = 0.001  # 0.1% commission per trade
 # Percentage of capital to allocate equally across all stocks at start
 # Remaining percentage stays as cash for strategy signals
 # Example: 80.0 means 80% divided equally among stocks, 20% reserved for trading
-INITIAL_ALLOCATION_PCT = 50.0  # Range: 0.0 to 100.0
+INITIAL_ALLOCATION_PCT = 80.0  # Range: 0.0 to 100.0
 
 # Fitness function weights
 FITNESS_WEIGHTS = {
-    'total_return': 0.47960431064701564,
-    'sharpe_ratio': 0.04268168066402324,
-    'max_drawdown': 0.1691682894708468,
-    'win_rate': 0.3085457192181142,
+    'total_return': 0.4,
+    'sharpe_ratio': 0.24,
+    'max_drawdown': 0.24,
+    'win_rate': 0.12,
 }
 
 # Minimum trades required for valid fitness

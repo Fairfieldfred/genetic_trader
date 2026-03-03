@@ -115,6 +115,7 @@ class _WorkerFunction:
             eval_config['start_date'] = evaluator.start_date
             eval_config['end_date'] = evaluator.end_date
             eval_config['macro_df'] = getattr(evaluator, 'macro_df', None)
+            eval_config['folds'] = getattr(evaluator, 'folds', None)
 
         return eval_config
 
@@ -139,6 +140,7 @@ class _WorkerFunction:
             evaluator.initial_cash = config.INITIAL_CASH
             evaluator.commission = config.COMMISSION
             evaluator.macro_df = self.evaluator_config.get('macro_df')
+            evaluator.folds = self.evaluator_config.get('folds') or evaluator._compute_folds()
 
         # Create trader and evaluate
         trader = GeneticTrader(chromosome)

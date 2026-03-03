@@ -185,6 +185,32 @@ class PythonBridge {
       return EvolutionProgress(avgFitness: avgFitness);
     }
 
+    // Parse worst fitness
+    final worstFitnessRegex = RegExp(r'Worst Fitness:\s+([-\d.]+)');
+    final worstMatch = worstFitnessRegex.firstMatch(line);
+
+    if (worstMatch != null) {
+      final worstFitness = double.parse(worstMatch.group(1)!);
+      return EvolutionProgress(worstFitness: worstFitness);
+    }
+
+    // Parse std dev
+    final stdDevRegex = RegExp(r'Std Dev:\s+([-\d.]+)');
+    final stdMatch = stdDevRegex.firstMatch(line);
+
+    if (stdMatch != null) {
+      final stdDev = double.parse(stdMatch.group(1)!);
+      return EvolutionProgress(stdDev: stdDev);
+    }
+
+    // Parse run_id from "Summary saved to results/summary_XXXXXXXX_XXXXXX.json"
+    final summaryRegex = RegExp(r'Summary saved to .+summary_(\d{8}_\d{6})\.json');
+    final summaryMatch = summaryRegex.firstMatch(line);
+
+    if (summaryMatch != null) {
+      return EvolutionProgress(runId: summaryMatch.group(1));
+    }
+
     return null;
   }
 
@@ -209,6 +235,8 @@ class EvolutionProgress {
   final double? bestFitness;
   final double? avgFitness;
   final double? worstFitness;
+  final double? stdDev;
+  final String? runId;
 
   EvolutionProgress({
     this.currentGeneration,
@@ -216,6 +244,8 @@ class EvolutionProgress {
     this.bestFitness,
     this.avgFitness,
     this.worstFitness,
+    this.stdDev,
+    this.runId,
   });
 
   double get progress {
@@ -231,6 +261,8 @@ class EvolutionProgress {
     double? bestFitness,
     double? avgFitness,
     double? worstFitness,
+    double? stdDev,
+    String? runId,
   }) {
     return EvolutionProgress(
       currentGeneration: currentGeneration ?? this.currentGeneration,
@@ -238,6 +270,8 @@ class EvolutionProgress {
       bestFitness: bestFitness ?? this.bestFitness,
       avgFitness: avgFitness ?? this.avgFitness,
       worstFitness: worstFitness ?? this.worstFitness,
+      stdDev: stdDev ?? this.stdDev,
+      runId: runId ?? this.runId,
     );
   }
 }

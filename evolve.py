@@ -126,6 +126,16 @@ class GeneticAlgorithm:
         else:
             print(f"\n Sequential evaluation (set USE_PARALLEL_EVALUATION=True for speedup)")
 
+        # Display K-fold info
+        folds = getattr(self.evaluator, 'folds', None)
+        if folds and len(folds) > 1:
+            print(f"\nK-Fold CV: {len(folds)} folds of ~{getattr(config, 'KFOLD_FOLD_YEARS', '?')} years each")
+            for i, (fs, fe) in enumerate(folds):
+                print(f"  Fold {i+1}: {fs} to {fe}")
+            if getattr(config, 'KFOLD_WEIGHT_RECENT', False):
+                print(f"  Recency weighting: factor {config.KFOLD_RECENT_WEIGHT_FACTOR}")
+            print(f"  Note: {len(folds)}x backtests per trader per generation")
+
         # Initialize components
         self.population = Population(size=self.population_size)
 
@@ -157,6 +167,9 @@ class GeneticAlgorithm:
             print(f"Mode: SINGLE STOCK ({self.symbol})")
         print(f"Population Size: {self.population_size}")
         print(f"Generations: {self.num_generations}")
+        folds = getattr(self.evaluator, 'folds', None)
+        if folds and len(folds) > 1:
+            print(f"K-Fold CV: {len(folds)} folds")
         print("=" * 60)
 
         for generation in range(self.num_generations):
@@ -247,25 +260,62 @@ class GeneticAlgorithm:
             print(f"  Winning Trades: {results['winning_trades']}")
             print(f"  Win Rate: {results['win_rate']:.2f}%")
 
+            # Display K-fold breakdown if available
+            if 'kfold_results' in results:
+                print("\nPer-Fold Breakdown:")
+                for fr in results['kfold_results']:
+                    if fr.get('skipped'):
+                        print(f"  Fold {fr['fold']} ({fr['period']}): "
+                              f"SKIPPED (insufficient data)")
+                    else:
+                        print(f"  Fold {fr['fold']} ({fr['period']}): "
+                              f"Return={fr['total_return']:.2f}%, "
+                              f"Sharpe={fr['sharpe_ratio']:.4f}, "
+                              f"Trades={fr['trade_count']}")
+
             # Calculate and display buy-and-hold benchmark
             print("\nBenchmark Comparison:")
             try:
-                if self.use_portfolio:
-                    # Portfolio buy-and-hold with same allocation as strategy
-                    # Access data_feeds from underlying evaluator
-                    data_feeds = getattr(self.evaluator, 'data_feeds', None)
-                    if data_feeds:
+                data_feeds = getattr(self.evaluator, 'data_feeds', None)
+                folds = getattr(self.evaluator, 'folds', None)
+                use_kfold = folds and len(folds) > 1
+
+                if self.use_portfolio and data_feeds:
+                    if use_kfold:
+                        # K-fold: average buy-and-hold across same folds
+                        min_bars = getattr(config, 'KFOLD_MIN_BARS_PER_FOLD', 200)
+                        fold_returns = []
+                        for fold_start, fold_end in folds:
+                            fold_feeds = {}
+                            for sym, df in data_feeds.items():
+                                sliced = df.loc[fold_start:fold_end]
+                                if len(sliced) >= min_bars:
+                                    fold_feeds[sym] = sliced
+                            if fold_feeds:
+                                bh = calculate_portfolio_buy_and_hold(
+                                    fold_feeds,
+                                    initial_capital=config.INITIAL_CASH,
+                                    allocation_pct=config.INITIAL_ALLOCATION_PCT
+                                )
+                                fold_returns.append(bh['total_return'])
+                        avg_bh_return = sum(fold_returns) / len(fold_returns) if fold_returns else 0.0
+                        benchmark = {
+                            'total_return': avg_bh_return,
+                            'allocation_pct': config.INITIAL_ALLOCATION_PCT,
+                        }
+                        print(f"  Buy-and-Hold Return (avg across {len(fold_returns)} folds, "
+                              f"{config.INITIAL_ALLOCATION_PCT}% allocated): {avg_bh_return:.2f}%")
+                    else:
                         benchmark = calculate_portfolio_buy_and_hold(
                             data_feeds,
                             initial_capital=config.INITIAL_CASH,
                             allocation_pct=config.INITIAL_ALLOCATION_PCT
                         )
                         print(f"  Buy-and-Hold Return (Portfolio, {config.INITIAL_ALLOCATION_PCT}% allocated): {benchmark['total_return']:.2f}%")
-                    else:
-                        print("  Buy-and-Hold: Unable to calculate (no data feeds)")
-                        benchmark = {'total_return': 0.0}
+                elif self.use_portfolio:
+                    print("  Buy-and-Hold: Unable to calculate (no data feeds)")
+                    benchmark = {'total_return': 0.0}
                 else:
-                    # Single stock buy-and-hold
                     benchmark = calculate_buy_and_hold(
                         self.data,
                         initial_capital=config.INITIAL_CASH
@@ -306,12 +356,37 @@ class GeneticAlgorithm:
         results = self.evaluator.get_detailed_results(best) if best else {}
 
         # Calculate benchmark with same allocation as strategy
+        folds = getattr(self.evaluator, 'folds', None)
+        use_kfold = folds and len(folds) > 1
         if self.use_portfolio:
-            benchmark = calculate_portfolio_buy_and_hold(
-                self.evaluator.data_feeds,
-                initial_capital=config.INITIAL_CASH,
-                allocation_pct=config.INITIAL_ALLOCATION_PCT
-            )
+            if use_kfold:
+                # K-fold: average buy-and-hold across same folds
+                min_bars = getattr(config, 'KFOLD_MIN_BARS_PER_FOLD', 200)
+                fold_returns = []
+                for fold_start, fold_end in folds:
+                    fold_feeds = {}
+                    for sym, df in self.evaluator.data_feeds.items():
+                        sliced = df.loc[fold_start:fold_end]
+                        if len(sliced) >= min_bars:
+                            fold_feeds[sym] = sliced
+                    if fold_feeds:
+                        bh = calculate_portfolio_buy_and_hold(
+                            fold_feeds,
+                            initial_capital=config.INITIAL_CASH,
+                            allocation_pct=config.INITIAL_ALLOCATION_PCT
+                        )
+                        fold_returns.append(bh['total_return'])
+                avg_bh_return = sum(fold_returns) / len(fold_returns) if fold_returns else 0.0
+                benchmark = {
+                    'total_return': avg_bh_return,
+                    'allocation_pct': config.INITIAL_ALLOCATION_PCT,
+                }
+            else:
+                benchmark = calculate_portfolio_buy_and_hold(
+                    self.evaluator.data_feeds,
+                    initial_capital=config.INITIAL_CASH,
+                    allocation_pct=config.INITIAL_ALLOCATION_PCT
+                )
         else:
             benchmark = calculate_buy_and_hold(
                 self.data,
@@ -349,6 +424,14 @@ class GeneticAlgorithm:
                 'allocation_pct': benchmark.get('allocation_pct', 100.0),
                 'strategy_outperformance': comparison.get('outperformance'),
                 'beats_benchmark': comparison.get('beats_benchmark'),
+            },
+            'kfold': {
+                'enabled': getattr(config, 'USE_KFOLD_VALIDATION', False),
+                'num_folds': len(getattr(self.evaluator, 'folds', [(None, None)])),
+                'fold_years': getattr(config, 'KFOLD_FOLD_YEARS', None),
+                'allow_overlap': getattr(config, 'KFOLD_ALLOW_OVERLAP', False),
+                'weight_recent': getattr(config, 'KFOLD_WEIGHT_RECENT', False),
+                'fold_results': results.get('kfold_results'),
             }
         }
 

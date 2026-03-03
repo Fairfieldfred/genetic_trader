@@ -6,7 +6,8 @@ Tests strategy across multiple stocks for better generalization.
 import backtrader as bt
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, List
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Tuple
 import config
 from genetic_trader import GeneticTrader
 from bt_strategy import create_strategy_from_trader, MacroAwarePandasData
@@ -76,9 +77,137 @@ class PortfolioFitnessEvaluator:
             except Exception as e:
                 print(f"\n  Warning: Could not load macro data: {e}")
 
+        # Pre-compute fold boundaries
+        self.folds = self._compute_folds()
+
+    def _compute_folds(self) -> List[Tuple[str, str]]:
+        """
+        Compute fold date boundaries from config.
+
+        Supports both non-overlapping and overlapping (sliding window)
+        folds. When overlapping, fold starts are evenly spaced so that
+        the first fold begins at the data start and the last fold ends
+        at (or near) the data end.
+
+        Returns:
+            List of (start_date, end_date) tuples.
+            Returns a single fold covering the full range when
+            K-fold is disabled.
+        """
+        if not getattr(config, 'USE_KFOLD_VALIDATION', False):
+            return [(self.start_date, self.end_date)]
+
+        start = datetime.strptime(self.start_date, '%Y-%m-%d')
+        end = datetime.strptime(self.end_date, '%Y-%m-%d')
+        total_days = (end - start).days
+
+        fold_years = getattr(config, 'KFOLD_FOLD_YEARS', 3)
+        fold_days = int(fold_years * 365.25)
+        num_folds = getattr(config, 'KFOLD_NUM_FOLDS', 2)
+        allow_overlap = getattr(config, 'KFOLD_ALLOW_OVERLAP', False)
+
+        # Clamp fold length to not exceed total span
+        fold_days = min(fold_days, total_days)
+
+        if num_folds <= 1:
+            return [(self.start_date, self.end_date)]
+
+        if allow_overlap:
+            # Sliding window: evenly space fold starts across the span
+            stride = (total_days - fold_days) / (num_folds - 1)
+        else:
+            # Non-overlapping: stride = fold_days, cap num_folds
+            stride = fold_days
+            num_folds = min(num_folds, max(1, total_days // fold_days))
+
+        folds = []
+        for i in range(num_folds):
+            fold_start = start + timedelta(days=int(i * stride))
+            fold_end = fold_start + timedelta(days=fold_days - 1)
+            fold_end = min(fold_end, end)
+            folds.append((
+                fold_start.strftime('%Y-%m-%d'),
+                fold_end.strftime('%Y-%m-%d'),
+            ))
+
+        return folds
+
+    def _score_results(self, results: Dict[str, Any]) -> float:
+        """
+        Compute a fitness score from backtest results.
+
+        Args:
+            results: Dict with total_return, sharpe_ratio,
+                     max_drawdown, win_rate, trade_count
+
+        Returns:
+            Fitness score, or -100.0 if minimum trade
+            requirement not met.
+        """
+        total_return = results['total_return']
+        sharpe_ratio = results['sharpe_ratio']
+        max_drawdown = results['max_drawdown']
+        win_rate = results['win_rate']
+        trade_count = results['trade_count']
+
+        if trade_count < config.MIN_TRADES_REQUIRED:
+            return -100.0
+
+        fitness = (
+            config.FITNESS_WEIGHTS['total_return'] * total_return +
+            config.FITNESS_WEIGHTS['sharpe_ratio'] * sharpe_ratio * 10 +
+            config.FITNESS_WEIGHTS['max_drawdown'] * max_drawdown +
+            config.FITNESS_WEIGHTS['win_rate'] * win_rate
+        )
+        return fitness
+
+    def _aggregate_fold_scores(
+        self,
+        fold_scores: List[Tuple[int, float]],
+    ) -> float:
+        """
+        Aggregate per-fold fitness scores into a single value.
+
+        Args:
+            fold_scores: List of (fold_index, score) tuples.
+
+        Returns:
+            Aggregated fitness score.
+        """
+        use_weighting = getattr(
+            config, 'KFOLD_WEIGHT_RECENT', False
+        )
+        weight_factor = getattr(
+            config, 'KFOLD_RECENT_WEIGHT_FACTOR', 1.5
+        )
+
+        if not use_weighting:
+            scores = [score for _, score in fold_scores]
+            return sum(scores) / len(scores)
+
+        # Linearly increasing weights: first fold = 1.0,
+        # last fold = weight_factor
+        num_folds = len(fold_scores)
+        weights = []
+        for i in range(num_folds):
+            w = 1.0 + (weight_factor - 1.0) * (
+                i / max(1, num_folds - 1)
+            )
+            weights.append(w)
+
+        weighted_sum = sum(
+            w * score
+            for w, (_, score) in zip(weights, fold_scores)
+        )
+        total_weight = sum(weights)
+        return weighted_sum / total_weight
+
     def calculate_fitness(self, trader: GeneticTrader) -> float:
         """
-        Calculate fitness score for a trader across the entire portfolio.
+        Calculate fitness score for a trader across the portfolio.
+
+        When K-fold is enabled, runs independent backtests on each
+        time fold and averages the scores.
 
         Args:
             trader: GeneticTrader to evaluate
@@ -87,49 +216,90 @@ class PortfolioFitnessEvaluator:
             Fitness score (higher is better)
         """
         try:
-            # Run backtest on portfolio
-            results = self._run_portfolio_backtest(trader)
+            if len(self.folds) == 1:
+                # Single fold — existing behavior
+                results = self._run_portfolio_backtest(trader)
+                return self._score_results(results)
 
-            # Calculate metrics
-            total_return = results['total_return']
-            sharpe_ratio = results['sharpe_ratio']
-            max_drawdown = results['max_drawdown']
-            win_rate = results['win_rate']
-            trade_count = results['trade_count']
-
-            # Check minimum trade requirement
-            if trade_count < config.MIN_TRADES_REQUIRED:
-                return -100.0
-
-            # Calculate weighted fitness
-            fitness = (
-                config.FITNESS_WEIGHTS['total_return'] * total_return +
-                config.FITNESS_WEIGHTS['sharpe_ratio'] * sharpe_ratio * 10 +
-                config.FITNESS_WEIGHTS['max_drawdown'] * max_drawdown +
-                config.FITNESS_WEIGHTS['win_rate'] * win_rate
+            # K-fold: run backtest per fold, aggregate
+            fold_scores = []
+            min_bars = getattr(
+                config, 'KFOLD_MIN_BARS_PER_FOLD', 200
             )
 
-            return fitness
+            for fold_idx, (fold_start, fold_end) in enumerate(
+                self.folds
+            ):
+                # Slice data_feeds to this fold's date range
+                fold_data = {}
+                for symbol, df in self.data_feeds.items():
+                    sliced = df.loc[fold_start:fold_end]
+                    if len(sliced) >= min_bars:
+                        fold_data[symbol] = sliced.copy()
+
+                if not fold_data:
+                    continue
+
+                # Slice macro data for this fold
+                fold_macro = None
+                if self.macro_df is not None:
+                    fm = self.macro_df.loc[fold_start:fold_end]
+                    if not fm.empty:
+                        fold_macro = fm
+
+                results = self._run_portfolio_backtest(
+                    trader,
+                    fold_data_feeds=fold_data,
+                    fold_macro_df=fold_macro,
+                )
+                score = self._score_results(results)
+                fold_scores.append((fold_idx, score))
+
+            if not fold_scores:
+                return -100.0
+
+            return self._aggregate_fold_scores(fold_scores)
 
         except Exception as e:
             print(f"Error evaluating trader: {e}")
             return -1000.0
 
-    def _run_portfolio_backtest(self, trader: GeneticTrader) -> Dict[str, Any]:
+    def _run_portfolio_backtest(
+        self,
+        trader: GeneticTrader,
+        fold_data_feeds: Dict[str, pd.DataFrame] = None,
+        fold_macro_df: pd.DataFrame = None,
+    ) -> Dict[str, Any]:
         """
-        Run backtest on entire portfolio using one strategy.
+        Run backtest on portfolio using one strategy.
 
         Args:
             trader: GeneticTrader to backtest
+            fold_data_feeds: Optional date-filtered data feeds
+                (uses self.data_feeds when None)
+            fold_macro_df: Optional date-filtered macro data
+                (uses self.macro_df when None)
 
         Returns:
             Dictionary with aggregated performance metrics
         """
+        # Use fold-specific or full data
+        data_feeds = (
+            fold_data_feeds
+            if fold_data_feeds is not None
+            else self.data_feeds
+        )
+        symbols = list(data_feeds.keys())
+        macro_df = (
+            fold_macro_df
+            if fold_macro_df is not None
+            else self.macro_df
+        )
+
         # Create Cerebro instance
         cerebro = bt.Cerebro()
 
         # Add strategy (will apply to all data feeds)
-        # Use portfolio mode with initial allocation from config
         strategy_class = create_strategy_from_trader(
             trader,
             use_portfolio=True,
@@ -137,22 +307,24 @@ class PortfolioFitnessEvaluator:
         )
         cerebro.addstrategy(strategy_class, printlog=False)
 
-        # Add all stock data feeds (with macro data merged if available)
-        use_macro = self.macro_df is not None
-        for symbol in self.valid_symbols:
-            stock_df = self.data_feeds[symbol]
+        # Add all stock data feeds
+        use_macro = macro_df is not None
+        for symbol in symbols:
+            stock_df = data_feeds[symbol]
 
+            # Always use MacroAwarePandasData so ensemble and TI
+            # data lines are available (missing columns return NaN
+            # which _get_line() handles safely)
             if use_macro:
-                # Merge macro columns into stock DataFrame
                 merged = DataLoader.merge_macro_into_stock(
-                    stock_df, self.macro_df
+                    stock_df, macro_df
                 )
                 data_feed = MacroAwarePandasData(
                     dataname=merged,
                     name=symbol
                 )
             else:
-                data_feed = bt.feeds.PandasData(
+                data_feed = MacroAwarePandasData(
                     dataname=stock_df,
                     name=symbol
                 )
@@ -181,11 +353,13 @@ class PortfolioFitnessEvaluator:
         # Calculate metrics
         total_return = ((ending_value - starting_value) / starting_value) * 100
 
-        # Sharpe ratio
+        # Sharpe ratio (clamped to realistic range;
+        # Backtrader can return extreme values on short periods)
         sharpe_analysis = strat.analyzers.sharpe.get_analysis()
         sharpe_ratio = sharpe_analysis.get('sharperatio', 0.0)
         if sharpe_ratio is None:
             sharpe_ratio = 0.0
+        sharpe_ratio = max(-5.0, min(5.0, float(sharpe_ratio)))
 
         # Max drawdown
         drawdown_analysis = strat.analyzers.drawdown.get_analysis()
@@ -230,6 +404,7 @@ class PortfolioFitnessEvaluator:
     def get_detailed_results(self, trader: GeneticTrader) -> Dict[str, Any]:
         """
         Get detailed backtest results for a trader on the portfolio.
+        Includes per-fold breakdowns when K-fold is enabled.
 
         Args:
             trader: GeneticTrader to evaluate
@@ -237,13 +412,83 @@ class PortfolioFitnessEvaluator:
         Returns:
             Dictionary with detailed performance metrics
         """
-        results = self._run_portfolio_backtest(trader)
-        results['genes'] = trader.get_genes()
-        results['fitness'] = self.calculate_fitness(trader)
-        results['num_stocks'] = len(self.valid_symbols)
-        results['symbols'] = self.valid_symbols
+        if len(self.folds) == 1:
+            results = self._run_portfolio_backtest(trader)
+            results['genes'] = trader.get_genes()
+            results['fitness'] = self.calculate_fitness(trader)
+            results['num_stocks'] = len(self.valid_symbols)
+            results['symbols'] = self.valid_symbols
+            return results
 
-        return results
+        # K-fold: collect per-fold results
+        fold_results = []
+        min_bars = getattr(
+            config, 'KFOLD_MIN_BARS_PER_FOLD', 200
+        )
+
+        for fold_idx, (fold_start, fold_end) in enumerate(
+            self.folds
+        ):
+            fold_data = {}
+            for symbol, df in self.data_feeds.items():
+                sliced = df.loc[fold_start:fold_end]
+                if len(sliced) >= min_bars:
+                    fold_data[symbol] = sliced.copy()
+
+            if not fold_data:
+                fold_results.append({
+                    'fold': fold_idx + 1,
+                    'period': f"{fold_start} to {fold_end}",
+                    'skipped': True,
+                })
+                continue
+
+            fold_macro = None
+            if self.macro_df is not None:
+                fm = self.macro_df.loc[fold_start:fold_end]
+                if not fm.empty:
+                    fold_macro = fm
+
+            results = self._run_portfolio_backtest(
+                trader,
+                fold_data_feeds=fold_data,
+                fold_macro_df=fold_macro,
+            )
+            results['fold'] = fold_idx + 1
+            results['period'] = f"{fold_start} to {fold_end}"
+            results['num_stocks_in_fold'] = len(fold_data)
+            results['skipped'] = False
+            fold_results.append(results)
+
+        # Aggregate for summary
+        valid = [r for r in fold_results if not r.get('skipped')]
+        aggregate = {
+            'total_return': np.mean(
+                [r['total_return'] for r in valid]
+            ),
+            'sharpe_ratio': np.mean(
+                [r['sharpe_ratio'] for r in valid]
+            ),
+            'max_drawdown': np.mean(
+                [r['max_drawdown'] for r in valid]
+            ),
+            'win_rate': np.mean(
+                [r['win_rate'] for r in valid]
+            ),
+            'trade_count': sum(
+                r['trade_count'] for r in valid
+            ),
+            'winning_trades': sum(
+                r['winning_trades'] for r in valid
+            ),
+        }
+        aggregate['genes'] = trader.get_genes()
+        aggregate['fitness'] = self.calculate_fitness(trader)
+        aggregate['num_stocks'] = len(self.valid_symbols)
+        aggregate['symbols'] = self.valid_symbols
+        aggregate['kfold_results'] = fold_results
+
+        return aggregate
 
     def get_per_stock_results(self, trader: GeneticTrader) -> Dict[str, Dict[str, Any]]:
         """
@@ -318,14 +563,28 @@ def select_random_portfolio(
     conn = sqlite3.connect(config.DATABASE_PATH)
     cursor = conn.cursor()
 
+    # Detect whether daily_indicators has a 'sector' column
+    cursor.execute("PRAGMA table_info(daily_indicators)")
+    columns = {row[1] for row in cursor.fetchall()}
+    has_sector = 'sector' in columns
+
     # Get all stocks with sufficient data
-    query = """
-        SELECT DISTINCT symbol, sector
-        FROM daily_indicators
-        GROUP BY symbol
-        HAVING COUNT(*) >= ?
-        ORDER BY symbol
-    """
+    if has_sector:
+        query = """
+            SELECT DISTINCT symbol, sector
+            FROM daily_indicators
+            GROUP BY symbol
+            HAVING COUNT(*) >= ?
+            ORDER BY symbol
+        """
+    else:
+        query = """
+            SELECT DISTINCT symbol
+            FROM daily_indicators
+            GROUP BY symbol
+            HAVING COUNT(*) >= ?
+            ORDER BY symbol
+        """
 
     cursor.execute(query, (min_records,))
     available_stocks = cursor.fetchall()
@@ -342,8 +601,9 @@ def select_random_portfolio(
     symbols = [stock[0] for stock in selected]
 
     print(f"\nRandomly selected {size} stocks:")
-    for i, (symbol, sector) in enumerate(selected, 1):
-        print(f"  {i}. {symbol} ({sector})")
+    for i, stock in enumerate(selected, 1):
+        label = f"{stock[0]} ({stock[1]})" if has_sector else stock[0]
+        print(f"  {i}. {label}")
 
     return symbols
 
