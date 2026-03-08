@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'views/screens/home_screen.dart';
 import 'viewmodels/config_viewmodel.dart';
+import 'viewmodels/results_viewmodel.dart';
 import 'utils/theme.dart';
 
 void main() {
@@ -16,6 +17,9 @@ class GeneticTraderApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ConfigViewModel()),
+        ChangeNotifierProvider(
+          create: (_) => ResultsViewModel()..loadResults(),
+        ),
       ],
       child: MaterialApp(
         title: 'Genetic Trader',

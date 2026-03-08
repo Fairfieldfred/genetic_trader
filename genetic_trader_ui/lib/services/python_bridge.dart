@@ -17,6 +17,7 @@ class PythonBridge {
     required Function(EvolutionProgress progress) onProgress,
     required Function() onComplete,
     required Function(String error) onError,
+    String? resumeRunId,
   }) async {
     if (_isRunning) {
       onError('Evolution is already running');
@@ -61,9 +62,14 @@ class PythonBridge {
       }
 
       // Start the Python process with unbuffered output
+      final args = ['-u', 'evolve.py'];
+      if (resumeRunId != null) {
+        args.addAll(['--resume', resumeRunId]);
+      }
+
       _process = await Process.start(
         'python3',
-        ['-u', 'evolve.py'],  // -u flag for unbuffered output
+        args,
         workingDirectory: workingDir,
       );
 
@@ -203,8 +209,58 @@ class PythonBridge {
       return EvolutionProgress(stdDev: stdDev);
     }
 
+    // Parse gene change lines like "GENE_CHANGE: gene_name: old -> new"
+    final geneChangeRegex = RegExp(
+      r'GENE_CHANGE:\s+(\w+):\s+(.+?)\s+->\s+(.+)',
+    );
+    final geneChangeMatch = geneChangeRegex.firstMatch(line);
+
+    if (geneChangeMatch != null) {
+      return EvolutionProgress(
+        geneChanges: [
+          GeneChangeInfo(
+            gene: geneChangeMatch.group(1)!,
+            oldValue: geneChangeMatch.group(2)!.trim(),
+            newValue: geneChangeMatch.group(3)!.trim(),
+          ),
+        ],
+      );
+    }
+
+    // Parse "GENE_CHANGE: initial" for first generation
+    if (line.trim() == 'GENE_CHANGE: initial') {
+      return EvolutionProgress(isInitialGenes: true);
+    }
+
+    // Parse resume header
+    final resumeRegex = RegExp(r'RESUMING from run\s+(\S+)');
+    if (resumeRegex.hasMatch(line)) {
+      return EvolutionProgress(
+        statusMessage: 'Resuming from previous run...',
+      );
+    }
+
+    // Parse out-of-sample test header
+    if (line.trim() == 'OUT-OF-SAMPLE TEST') {
+      return EvolutionProgress(
+        statusMessage: 'Running out-of-sample test...',
+      );
+    }
+
+    // Parse out-of-sample total return
+    final oosReturnRegex = RegExp(
+      r'Out-of-Sample Performance:',
+    );
+    if (oosReturnRegex.hasMatch(line)) {
+      return EvolutionProgress(
+        statusMessage: 'Evaluating on test data...',
+      );
+    }
+
     // Parse run_id from "Summary saved to results/summary_XXXXXXXX_XXXXXX.json"
-    final summaryRegex = RegExp(r'Summary saved to .+summary_(\d{8}_\d{6})\.json');
+    final summaryRegex = RegExp(
+      r'Summary saved to .+summary_(\d{8}_\d{6})\.json',
+    );
     final summaryMatch = summaryRegex.firstMatch(line);
 
     if (summaryMatch != null) {
@@ -228,6 +284,19 @@ class PythonBridge {
   }
 }
 
+/// A single gene change parsed from Python stdout
+class GeneChangeInfo {
+  final String gene;
+  final String oldValue;
+  final String newValue;
+
+  const GeneChangeInfo({
+    required this.gene,
+    required this.oldValue,
+    required this.newValue,
+  });
+}
+
 /// Progress information parsed from evolution output
 class EvolutionProgress {
   final int? currentGeneration;
@@ -237,6 +306,9 @@ class EvolutionProgress {
   final double? worstFitness;
   final double? stdDev;
   final String? runId;
+  final List<GeneChangeInfo>? geneChanges;
+  final bool? isInitialGenes;
+  final String? statusMessage;
 
   EvolutionProgress({
     this.currentGeneration,
@@ -246,6 +318,9 @@ class EvolutionProgress {
     this.worstFitness,
     this.stdDev,
     this.runId,
+    this.geneChanges,
+    this.isInitialGenes,
+    this.statusMessage,
   });
 
   double get progress {
@@ -263,15 +338,25 @@ class EvolutionProgress {
     double? worstFitness,
     double? stdDev,
     String? runId,
+    List<GeneChangeInfo>? geneChanges,
+    bool? isInitialGenes,
+    String? statusMessage,
   }) {
     return EvolutionProgress(
-      currentGeneration: currentGeneration ?? this.currentGeneration,
-      totalGenerations: totalGenerations ?? this.totalGenerations,
+      currentGeneration:
+          currentGeneration ?? this.currentGeneration,
+      totalGenerations:
+          totalGenerations ?? this.totalGenerations,
       bestFitness: bestFitness ?? this.bestFitness,
       avgFitness: avgFitness ?? this.avgFitness,
       worstFitness: worstFitness ?? this.worstFitness,
       stdDev: stdDev ?? this.stdDev,
       runId: runId ?? this.runId,
+      geneChanges: geneChanges ?? this.geneChanges,
+      isInitialGenes:
+          isInitialGenes ?? this.isInitialGenes,
+      statusMessage:
+          statusMessage ?? this.statusMessage,
     );
   }
 }

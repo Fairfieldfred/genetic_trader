@@ -15,6 +15,9 @@ class EvolutionResult {
   final int numGenerations;
   final BestTraderResult bestTrader;
   final BenchmarkResult benchmark;
+  final RunConfig? runConfig;
+  final OutOfSampleResult? outOfSample;
+  final String? resumedFrom;
 
   EvolutionResult({
     required this.runId,
@@ -29,6 +32,9 @@ class EvolutionResult {
     required this.numGenerations,
     required this.bestTrader,
     required this.benchmark,
+    this.runConfig,
+    this.outOfSample,
+    this.resumedFrom,
   });
 
   /// Parse run_id format "YYYYMMDD_HHMMSS" into DateTime
@@ -69,6 +75,15 @@ class EvolutionResult {
       benchmark: BenchmarkResult.fromJson(
         json['benchmark'] as Map<String, dynamic>? ?? {},
       ),
+      runConfig: json['config'] != null
+          ? RunConfig.fromJson(json['config'] as Map<String, dynamic>)
+          : null,
+      outOfSample: json['out_of_sample'] != null
+          ? OutOfSampleResult.fromJson(
+              json['out_of_sample'] as Map<String, dynamic>,
+            )
+          : null,
+      resumedFrom: json['resumed_from'] as String?,
     );
   }
 
@@ -90,15 +105,28 @@ class BestTraderResult {
   final double fitness;
   final Map<String, dynamic> genes;
   final TraderPerformance performance;
+  final Map<String, StockPerformance>? perStockPerformance;
 
   BestTraderResult({
     required this.generation,
     required this.fitness,
     required this.genes,
     required this.performance,
+    this.perStockPerformance,
   });
 
   factory BestTraderResult.fromJson(Map<String, dynamic> json) {
+    Map<String, StockPerformance>? perStock;
+    final rawPerStock = json['per_stock_performance'] as Map<String, dynamic>?;
+    if (rawPerStock != null) {
+      perStock = rawPerStock.map(
+        (key, value) => MapEntry(
+          key,
+          StockPerformance.fromJson(value as Map<String, dynamic>),
+        ),
+      );
+    }
+
     return BestTraderResult(
       generation: json['generation'] as int? ?? 0,
       fitness: (json['fitness'] as num?)?.toDouble() ?? 0.0,
@@ -106,6 +134,7 @@ class BestTraderResult {
       performance: TraderPerformance.fromJson(
         json['performance'] as Map<String, dynamic>? ?? {},
       ),
+      perStockPerformance: perStock,
     );
   }
 }
@@ -137,6 +166,140 @@ class TraderPerformance {
   }
 }
 
+/// Per-stock performance from the portfolio backtest
+class StockPerformance {
+  final int trades;
+  final int won;
+  final int lost;
+  final double pnl;
+  final double winRate;
+
+  StockPerformance({
+    required this.trades,
+    required this.won,
+    required this.lost,
+    required this.pnl,
+    required this.winRate,
+  });
+
+  factory StockPerformance.fromJson(Map<String, dynamic> json) {
+    return StockPerformance(
+      trades: json['trades'] as int? ?? 0,
+      won: json['won'] as int? ?? 0,
+      lost: json['lost'] as int? ?? 0,
+      pnl: (json['pnl'] as num?)?.toDouble() ?? 0.0,
+      winRate: (json['win_rate'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+/// Full run configuration for reproducibility
+class RunConfig {
+  // GA parameters
+  final double mutationRate;
+  final double crossoverRate;
+  final int elitismCount;
+  final int tournamentSize;
+  final int? randomSeed;
+
+  // K-fold
+  final bool useKfoldValidation;
+  final int kfoldNumFolds;
+  final int kfoldFoldYears;
+  final bool kfoldAllowOverlap;
+  final bool kfoldWeightRecent;
+  final double kfoldRecentWeightFactor;
+  final int kfoldMinBarsPerFold;
+
+  // Features
+  final bool useMacroData;
+  final bool useTechnicalIndicators;
+  final bool useEnsembleSignals;
+
+  // Backtrader
+  final double initialCash;
+  final double commission;
+  final double initialAllocationPct;
+
+  // Fitness
+  final Map<String, double> fitnessWeights;
+  final int minTradesRequired;
+
+  // Execution
+  final bool useParallelEvaluation;
+  final int? maxParallelWorkers;
+  final String? databasePath;
+
+  RunConfig({
+    required this.mutationRate,
+    required this.crossoverRate,
+    required this.elitismCount,
+    required this.tournamentSize,
+    this.randomSeed,
+    required this.useKfoldValidation,
+    required this.kfoldNumFolds,
+    required this.kfoldFoldYears,
+    required this.kfoldAllowOverlap,
+    required this.kfoldWeightRecent,
+    required this.kfoldRecentWeightFactor,
+    required this.kfoldMinBarsPerFold,
+    required this.useMacroData,
+    required this.useTechnicalIndicators,
+    required this.useEnsembleSignals,
+    required this.initialCash,
+    required this.commission,
+    required this.initialAllocationPct,
+    required this.fitnessWeights,
+    required this.minTradesRequired,
+    required this.useParallelEvaluation,
+    this.maxParallelWorkers,
+    this.databasePath,
+  });
+
+  factory RunConfig.fromJson(Map<String, dynamic> json) {
+    final ga = json['ga_parameters'] as Map<String, dynamic>? ?? {};
+    final kf = json['kfold'] as Map<String, dynamic>? ?? {};
+    final feat = json['features'] as Map<String, dynamic>? ?? {};
+    final bt = json['backtrader'] as Map<String, dynamic>? ?? {};
+    final fit = json['fitness'] as Map<String, dynamic>? ?? {};
+    final exec = json['execution'] as Map<String, dynamic>? ?? {};
+
+    final rawWeights = fit['fitness_weights'] as Map<String, dynamic>? ?? {};
+    final weights = rawWeights.map(
+      (k, v) => MapEntry(k, (v as num?)?.toDouble() ?? 0.0),
+    );
+
+    return RunConfig(
+      mutationRate: (ga['mutation_rate'] as num?)?.toDouble() ?? 0.0,
+      crossoverRate: (ga['crossover_rate'] as num?)?.toDouble() ?? 0.0,
+      elitismCount: ga['elitism_count'] as int? ?? 0,
+      tournamentSize: ga['tournament_size'] as int? ?? 0,
+      randomSeed: ga['random_seed'] as int?,
+      useKfoldValidation: kf['use_kfold_validation'] as bool? ?? false,
+      kfoldNumFolds: kf['kfold_num_folds'] as int? ?? 2,
+      kfoldFoldYears: kf['kfold_fold_years'] as int? ?? 3,
+      kfoldAllowOverlap: kf['kfold_allow_overlap'] as bool? ?? false,
+      kfoldWeightRecent: kf['kfold_weight_recent'] as bool? ?? false,
+      kfoldRecentWeightFactor:
+          (kf['kfold_recent_weight_factor'] as num?)?.toDouble() ?? 1.5,
+      kfoldMinBarsPerFold: kf['kfold_min_bars_per_fold'] as int? ?? 200,
+      useMacroData: feat['use_macro_data'] as bool? ?? false,
+      useTechnicalIndicators:
+          feat['use_technical_indicators'] as bool? ?? false,
+      useEnsembleSignals: feat['use_ensemble_signals'] as bool? ?? false,
+      initialCash: (bt['initial_cash'] as num?)?.toDouble() ?? 100000.0,
+      commission: (bt['commission'] as num?)?.toDouble() ?? 0.001,
+      initialAllocationPct:
+          (bt['initial_allocation_pct'] as num?)?.toDouble() ?? 80.0,
+      fitnessWeights: weights,
+      minTradesRequired: fit['min_trades_required'] as int? ?? 5,
+      useParallelEvaluation: exec['use_parallel_evaluation'] as bool? ?? true,
+      maxParallelWorkers: exec['max_parallel_workers'] as int?,
+      databasePath: exec['database_path'] as String?,
+    );
+  }
+}
+
 /// Benchmark comparison results
 class BenchmarkResult {
   final double buyAndHoldReturn;
@@ -163,6 +326,102 @@ class BenchmarkResult {
   }
 }
 
+/// Out-of-sample test results
+class OutOfSampleResult {
+  final bool enabled;
+  final String testStartDate;
+  final String testEndDate;
+  final TraderPerformance? performance;
+  final OutOfSampleBenchmark? benchmark;
+  final Map<String, StockPerformance>? perStockPerformance;
+  final String? error;
+
+  OutOfSampleResult({
+    required this.enabled,
+    required this.testStartDate,
+    required this.testEndDate,
+    this.performance,
+    this.benchmark,
+    this.perStockPerformance,
+    this.error,
+  });
+
+  factory OutOfSampleResult.fromJson(Map<String, dynamic> json) {
+    Map<String, StockPerformance>? perStock;
+    final rawPerStock =
+        json['per_stock_performance'] as Map<String, dynamic>?;
+    if (rawPerStock != null) {
+      perStock = rawPerStock.map(
+        (key, value) => MapEntry(
+          key,
+          StockPerformance.fromJson(
+            value as Map<String, dynamic>,
+          ),
+        ),
+      );
+    }
+
+    return OutOfSampleResult(
+      enabled: json['enabled'] as bool? ?? false,
+      testStartDate:
+          json['test_start_date'] as String? ?? '',
+      testEndDate: json['test_end_date'] as String? ?? '',
+      performance: json['performance'] != null
+          ? TraderPerformance.fromJson(
+              json['performance'] as Map<String, dynamic>,
+            )
+          : null,
+      benchmark: json['benchmark'] != null
+          ? OutOfSampleBenchmark.fromJson(
+              json['benchmark'] as Map<String, dynamic>,
+            )
+          : null,
+      perStockPerformance: perStock,
+      error: json['error'] as String?,
+    );
+  }
+}
+
+/// Benchmark comparison for the out-of-sample test period
+class OutOfSampleBenchmark {
+  final double buyAndHoldReturn;
+  final double outperformance;
+  final bool beatsBenchmark;
+
+  OutOfSampleBenchmark({
+    required this.buyAndHoldReturn,
+    required this.outperformance,
+    required this.beatsBenchmark,
+  });
+
+  factory OutOfSampleBenchmark.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return OutOfSampleBenchmark(
+      buyAndHoldReturn:
+          (json['buy_and_hold_return'] as num?)?.toDouble() ??
+              0.0,
+      outperformance:
+          (json['outperformance'] as num?)?.toDouble() ?? 0.0,
+      beatsBenchmark:
+          json['beats_benchmark'] as bool? ?? false,
+    );
+  }
+}
+
+/// A gene change between generations
+class GeneChange {
+  final String gene;
+  final String oldValue;
+  final String newValue;
+
+  const GeneChange({
+    required this.gene,
+    required this.oldValue,
+    required this.newValue,
+  });
+}
+
 /// A single row from the fitness history CSV
 class FitnessHistoryEntry {
   final int generation;
@@ -170,6 +429,7 @@ class FitnessHistoryEntry {
   final double avgFitness;
   final double worstFitness;
   final double stdFitness;
+  final List<GeneChange>? geneChanges;
 
   FitnessHistoryEntry({
     required this.generation,
@@ -177,6 +437,7 @@ class FitnessHistoryEntry {
     required this.avgFitness,
     required this.worstFitness,
     required this.stdFitness,
+    this.geneChanges,
   });
 
   /// Parse a CSV row (after header)

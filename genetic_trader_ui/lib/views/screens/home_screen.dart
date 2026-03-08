@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../viewmodels/results_viewmodel.dart';
 import 'config_screen.dart';
 import 'evolution_screen.dart';
 import 'results_list_screen.dart';
@@ -54,50 +57,14 @@ class HomeScreen extends StatelessWidget {
               Text(
                 'AI-Powered Trading Strategy Evolution',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      color:
+                          Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
               ),
               const SizedBox(height: 48),
 
               // Quick Stats Card
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Quick Stats',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildStatItem(
-                            context,
-                            icon: Icons.analytics,
-                            label: 'Total Runs',
-                            value: '-',
-                          ),
-                          _buildStatItem(
-                            context,
-                            icon: Icons.stars,
-                            label: 'Best Return',
-                            value: '-',
-                          ),
-                          _buildStatItem(
-                            context,
-                            icon: Icons.access_time,
-                            label: 'Last Run',
-                            value: 'Never',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              const _QuickStats(),
               const SizedBox(height: 32),
 
               // Action Buttons
@@ -110,13 +77,15 @@ class HomeScreen extends StatelessWidget {
                       icon: const Icon(Icons.play_arrow),
                       label: const Text('Start Evolution'),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 16),
                       ),
                       onPressed: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const EvolutionScreen(),
+                            builder: (context) =>
+                                const EvolutionScreen(),
                           ),
                         );
                       },
@@ -127,7 +96,8 @@ class HomeScreen extends StatelessWidget {
                       icon: const Icon(Icons.show_chart),
                       label: const Text('View Results'),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 16),
                       ),
                       onPressed: () {
                         Navigator.push(
@@ -145,7 +115,8 @@ class HomeScreen extends StatelessWidget {
                       icon: const Icon(Icons.tune),
                       label: const Text('Configuration'),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 16),
                       ),
                       onPressed: () {
                         Navigator.push(
@@ -164,16 +135,89 @@ class HomeScreen extends StatelessWidget {
 
               // Info
               Text(
-                'Configure your genetic algorithm parameters\nand start evolving profitable trading strategies',
+                'Configure your genetic algorithm parameters\n'
+                'and start evolving profitable trading strategies',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      color:
+                          Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Quick stats card that reads from ResultsViewModel
+class _QuickStats extends StatelessWidget {
+  const _QuickStats();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ResultsViewModel>(
+      builder: (context, vm, _) {
+        final results = vm.results;
+
+        final totalRuns = results.length;
+
+        String bestReturn = '-';
+        if (results.isNotEmpty) {
+          final best = results
+              .map((r) => r.bestTrader.performance.totalReturn)
+              .reduce((a, b) => a > b ? a : b);
+          bestReturn =
+              '${best >= 0 ? '+' : ''}${best.toStringAsFixed(1)}%';
+        }
+
+        String lastRun = 'Never';
+        if (results.isNotEmpty) {
+          lastRun = DateFormat('MMM d, yyyy').format(
+            results.first.runDate,
+          );
+        }
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Quick Stats',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildStatItem(
+                      context,
+                      icon: Icons.analytics,
+                      label: 'Total Runs',
+                      value: totalRuns > 0 ? '$totalRuns' : '-',
+                    ),
+                    _buildStatItem(
+                      context,
+                      icon: Icons.stars,
+                      label: 'Best Return',
+                      value: bestReturn,
+                    ),
+                    _buildStatItem(
+                      context,
+                      icon: Icons.access_time,
+                      label: 'Last Run',
+                      value: lastRun,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -200,11 +244,11 @@ class HomeScreen extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color:
+                    Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         ),
       ],
     );
   }
-
 }

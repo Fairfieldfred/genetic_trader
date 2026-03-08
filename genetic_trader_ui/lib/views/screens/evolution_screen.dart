@@ -8,19 +8,23 @@ import 'results_dashboard_screen.dart';
 
 /// Screen for running and monitoring evolution process
 class EvolutionScreen extends StatelessWidget {
-  const EvolutionScreen({super.key});
+  final String? resumeRunId;
+
+  const EvolutionScreen({super.key, this.resumeRunId});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => EvolutionViewModel(),
-      child: const _EvolutionScreenContent(),
+      child: _EvolutionScreenContent(resumeRunId: resumeRunId),
     );
   }
 }
 
 class _EvolutionScreenContent extends StatelessWidget {
-  const _EvolutionScreenContent();
+  final String? resumeRunId;
+
+  const _EvolutionScreenContent({this.resumeRunId});
 
   @override
   Widget build(BuildContext context) {
@@ -82,26 +86,44 @@ class _EvolutionScreenContent extends StatelessWidget {
         child: Column(
           children: [
             if (!viewModel.isRunning && !viewModel.isCompleted) ...[
-              const Icon(
-                Icons.rocket_launch,
+              Icon(
+                resumeRunId != null
+                    ? Icons.fast_forward
+                    : Icons.rocket_launch,
                 size: 64,
                 color: Colors.deepPurple,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Ready to Start Evolution',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Text(
+                resumeRunId != null
+                    ? 'Resume Training'
+                    : 'Ready to Start Evolution',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Click the button below to begin evolving trading strategies',
+              Text(
+                resumeRunId != null
+                    ? 'Continuing from run $resumeRunId'
+                    : 'Click the button below to begin '
+                        'evolving trading strategies',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: const TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Start Evolution'),
+                icon: Icon(
+                  resumeRunId != null
+                      ? Icons.fast_forward
+                      : Icons.play_arrow,
+                ),
+                label: Text(
+                  resumeRunId != null
+                      ? 'Resume Training'
+                      : 'Start Evolution',
+                ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 32,
@@ -109,7 +131,9 @@ class _EvolutionScreenContent extends StatelessWidget {
                   ),
                 ),
                 onPressed: () {
-                  viewModel.startEvolution();
+                  viewModel.startEvolution(
+                    resumeRunId: resumeRunId,
+                  );
                 },
               ),
             ] else if (viewModel.isRunning) ...[
@@ -184,7 +208,21 @@ class _EvolutionScreenContent extends StatelessWidget {
                       viewModel.reset();
                     },
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.fast_forward),
+                    label: const Text('Resume'),
+                    onPressed: viewModel.runId != null
+                        ? () {
+                            final runId = viewModel.runId!;
+                            viewModel.reset();
+                            viewModel.startEvolution(
+                              resumeRunId: runId,
+                            );
+                          }
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.analytics),
                     label: const Text('View Results'),
@@ -607,10 +645,58 @@ class _LiveFitnessChart extends StatelessWidget {
         borderData: FlBorderData(show: false),
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
             getTooltipItems: (touchedSpots) {
+              // Build gene change text if available
+              String? geneText;
+              if (touchedSpots.isNotEmpty) {
+                final gen =
+                    touchedSpots.first.x.toInt();
+                final entry = history
+                    .cast<FitnessHistoryEntry?>()
+                    .firstWhere(
+                      (e) => e!.generation == gen,
+                      orElse: () => null,
+                    );
+                if (entry?.geneChanges != null &&
+                    entry!.geneChanges!.isNotEmpty) {
+                  final changes =
+                      entry.geneChanges!;
+                  const maxShow = 4;
+                  final lines = changes
+                      .take(maxShow)
+                      .map(
+                        (gc) =>
+                            '${_shortGeneName(gc.gene)}: '
+                            '${gc.oldValue}'
+                            '\u2192${gc.newValue}',
+                      )
+                      .join('\n');
+                  final extra =
+                      changes.length > maxShow
+                          ? '\n+${changes.length - maxShow} more'
+                          : '';
+                  geneText =
+                      '\n\nGene changes:\n$lines$extra';
+                }
+              }
+
               return touchedSpots.map((spot) {
-                final labels = ['Best', 'Avg', 'Worst'];
-                final colors = [primaryColor, Colors.orange, Colors.grey];
+                final labels = [
+                  'Best',
+                  'Avg',
+                  'Worst',
+                ];
+                final colors = [
+                  primaryColor,
+                  Colors.orange,
+                  Colors.grey,
+                ];
+                // Append gene changes to last item
+                final isLast =
+                    spot.barIndex ==
+                    touchedSpots.length - 1;
                 return LineTooltipItem(
                   '${labels[spot.barIndex]}: '
                   '${spot.y.toStringAsFixed(2)}',
@@ -619,6 +705,25 @@ class _LiveFitnessChart extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
+                  children: isLast &&
+                          geneText != null
+                      ? [
+                          TextSpan(
+                            text: geneText,
+                            style: TextStyle(
+                              color: Colors
+                                  .greenAccent
+                                  .withValues(
+                                    alpha: 0.9,
+                                  ),
+                              fontSize: 10,
+                              fontWeight:
+                                  FontWeight.normal,
+                              height: 1.4,
+                            ),
+                          ),
+                        ]
+                      : null,
                 );
               }).toList();
             },
@@ -685,6 +790,57 @@ class _LiveFitnessChart extends StatelessWidget {
     if (count <= 30) return 5;
     if (count <= 60) return 10;
     return 20;
+  }
+
+  /// Shorten gene names for compact tooltip display
+  String _shortGeneName(String name) {
+    const abbrevs = {
+      'ma_short_period': 'ma_short',
+      'ma_long_period': 'ma_long',
+      'stop_loss_pct': 'stop_loss',
+      'take_profit_pct': 'take_profit',
+      'position_size_pct': 'pos_size',
+      'macro_enabled': 'macro_on',
+      'macro_weight': 'macro_wt',
+      'macro_vix_threshold': 'vix_thresh',
+      'macro_vix_position_scale': 'vix_scale',
+      'macro_yc_threshold': 'yc_thresh',
+      'macro_yc_action': 'yc_action',
+      'macro_rate_threshold': 'rate_thresh',
+      'macro_rate_position_scale': 'rate_scale',
+      'macro_cpi_threshold': 'cpi_thresh',
+      'macro_cpi_position_scale': 'cpi_scale',
+      'macro_unemp_threshold': 'unemp_thresh',
+      'macro_unemp_action': 'unemp_act',
+      'macro_risk_stop_adj': 'risk_stop',
+      'macro_risk_tp_adj': 'risk_tp',
+      'macro_regime_count_req': 'regime_req',
+      'ti_enabled': 'ti_on',
+      'ti_rsi_overbought': 'rsi_ob',
+      'ti_rsi_oversold': 'rsi_os',
+      'ti_adx_threshold': 'adx_thresh',
+      'ti_adx_position_scale': 'adx_scale',
+      'ti_natr_threshold': 'natr_thresh',
+      'ti_natr_risk_action': 'natr_act',
+      'ti_mfi_overbought': 'mfi_ob',
+      'ti_mfi_oversold': 'mfi_os',
+      'ti_macdhist_confirm': 'macd_conf',
+      'ti_macdhist_exit_confirm': 'macd_exit',
+      'ensemble_enabled': 'ens_on',
+      'sig_ma_weight': 'sig_ma',
+      'sig_bb_weight': 'sig_bb',
+      'sig_stoch_weight': 'sig_stoch',
+      'sig_macd_weight': 'sig_macd',
+      'sig_rsi_weight': 'sig_rsi',
+      'sig_buy_threshold': 'buy_thresh',
+      'sig_sell_threshold': 'sell_thresh',
+      'sig_bb_period_idx': 'bb_period',
+      'sig_stoch_ob': 'stoch_ob',
+      'sig_stoch_os': 'stoch_os',
+      'sig_rsi_ob': 'rsi_ob',
+      'sig_rsi_os': 'rsi_os',
+    };
+    return abbrevs[name] ?? name;
   }
 
   Widget _buildLegend(BuildContext context) {

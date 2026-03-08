@@ -4,6 +4,7 @@ Orchestrates the evolutionary process to find optimal trading strategies.
 """
 
 import random
+import argparse
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -12,6 +13,7 @@ import json
 import config
 from data_loader import DataLoader
 from population import Population
+from genetic_trader import GeneticTrader
 from portfolio_fitness import PortfolioFitnessEvaluator, select_random_portfolio
 from parallel_fitness import enable_parallel_evaluation
 from benchmark import calculate_buy_and_hold, calculate_portfolio_buy_and_hold, compare_to_benchmark
@@ -53,7 +55,8 @@ class GeneticAlgorithm:
         start_date: str = None,
         end_date: str = None,
         population_size: int = None,
-        num_generations: int = None
+        num_generations: int = None,
+        resume_from: str = None
     ):
         """
         Initialize genetic algorithm.
@@ -90,9 +93,11 @@ class GeneticAlgorithm:
 
             # Select stocks
             if config.AUTO_SELECT_PORTFOLIO:
+                sectors = getattr(config, 'PORTFOLIO_SECTORS', [])
                 self.portfolio_symbols = select_random_portfolio(
                     size=config.PORTFOLIO_SIZE,
-                    seed=config.RANDOM_SEED
+                    seed=config.RANDOM_SEED,
+                    sectors=sectors if sectors else None
                 )
             else:
                 self.portfolio_symbols = config.PORTFOLIO_STOCKS[:config.PORTFOLIO_SIZE]
@@ -139,6 +144,11 @@ class GeneticAlgorithm:
         # Initialize components
         self.population = Population(size=self.population_size)
 
+        # Resume from previous run if requested
+        self.resumed_from = None
+        if resume_from:
+            self._apply_resume(resume_from)
+
         # Track evolution history
         self.history = {
             'generation': [],
@@ -148,6 +158,10 @@ class GeneticAlgorithm:
             'std_fitness': [],
         }
 
+        # Gene change tracking between generations
+        self._prev_best_genes = None
+        self._prev_best_fitness = None
+
         # Execution timestamp
         self.run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -155,6 +169,103 @@ class GeneticAlgorithm:
         """Create output directories if they don't exist."""
         for dir_name in [config.RESULTS_DIR, config.LOGS_DIR, config.CHECKPOINT_DIR]:
             Path(dir_name).mkdir(exist_ok=True)
+
+    def _apply_resume(self, run_id: str):
+        """
+        Load elite traders from a previous run and seed the population.
+
+        Args:
+            run_id: The run_id (YYYYMMDD_HHMMSS) of the run to resume from
+        """
+        summary_file = f"{config.RESULTS_DIR}/summary_{run_id}.json"
+        if not Path(summary_file).exists():
+            raise FileNotFoundError(
+                f"Cannot resume: summary file not found at {summary_file}"
+            )
+
+        with open(summary_file, 'r') as f:
+            summary = json.load(f)
+
+        print("\n" + "=" * 60)
+        print(f"RESUMING from run {run_id}")
+        print("=" * 60)
+
+        # Extract elite traders (fallback to single best_trader for old runs)
+        elite_data = summary.get('elite_traders', [])
+        if not elite_data:
+            best_data = summary.get('best_trader', {})
+            if best_data and best_data.get('genes'):
+                # Reconstruct chromosome from genes for old-format runs
+                chromosome = []
+                genes = best_data['genes']
+                for gene_name in config.GENE_ORDER:
+                    if gene_name in genes:
+                        chromosome.append(genes[gene_name])
+                    else:
+                        raise ValueError(
+                            f"Gene '{gene_name}' not found in saved run. "
+                            f"Config gene set has changed — cannot resume."
+                        )
+                elite_data = [{
+                    'chromosome': chromosome,
+                    'fitness': best_data.get('fitness'),
+                    'generation': best_data.get('generation', 0),
+                }]
+            else:
+                raise ValueError(
+                    f"No elite traders or best trader found in {summary_file}"
+                )
+
+        # Validate chromosome length against current config
+        expected_len = len(config.GENE_ORDER)
+        first_len = len(elite_data[0].get('chromosome', []))
+        if first_len != expected_len:
+            raise ValueError(
+                f"Chromosome length mismatch: saved run has {first_len} genes, "
+                f"current config has {expected_len} genes. "
+                f"Cannot resume with different gene configuration."
+            )
+
+        # Reconstruct traders
+        seed_traders = []
+        for data in elite_data:
+            try:
+                trader = GeneticTrader.from_dict(data)
+                seed_traders.append(trader)
+            except ValueError as e:
+                print(f"  Warning: skipping invalid trader: {e}")
+
+        if not seed_traders:
+            raise ValueError("No valid traders could be loaded from saved run")
+
+        # Get previous generation count for offset
+        prev_generations = summary.get('num_generations', 0)
+        # If the previous run was itself resumed, add its start offset
+        prev_config = summary.get('config', {})
+        prev_start_gen = summary.get('start_generation', 0)
+        start_gen = prev_start_gen + prev_generations
+
+        # Seed population
+        self.population.seed_population(seed_traders, start_generation=start_gen)
+        self.resumed_from = run_id
+
+        print(f"  Loaded {len(seed_traders)} elite traders")
+        print(f"  Population: {len(seed_traders)} elites + "
+              f"{self.population_size - len(seed_traders)} random")
+        print(f"  Continuing from generation {start_gen}")
+
+        # Load previous history for continuity
+        history_file = f"{config.RESULTS_DIR}/history_{run_id}.csv"
+        if Path(history_file).exists():
+            prev_history = pd.read_csv(history_file)
+            self.history = {
+                'generation': prev_history['generation'].tolist(),
+                'best_fitness': prev_history['best_fitness'].tolist(),
+                'avg_fitness': prev_history['avg_fitness'].tolist(),
+                'worst_fitness': prev_history['worst_fitness'].tolist(),
+                'std_fitness': prev_history['std_fitness'].tolist(),
+            }
+            print(f"  Loaded {len(prev_history)} generations of history")
 
     def evolve(self):
         """Run the genetic algorithm evolution process."""
@@ -172,9 +283,14 @@ class GeneticAlgorithm:
             print(f"K-Fold CV: {len(folds)} folds")
         print("=" * 60)
 
-        for generation in range(self.num_generations):
+        start_gen = self.population.generation
+        total_display = start_gen + self.num_generations
+
+        for i in range(self.num_generations):
+            generation = start_gen + i
+
             print(f"\n{'=' * 60}")
-            print(f"Generation {generation + 1}/{self.num_generations}")
+            print(f"Generation {generation + 1}/{total_display}")
             print(f"{'=' * 60}")
 
             # Evaluate fitness
@@ -193,12 +309,19 @@ class GeneticAlgorithm:
                 self._save_checkpoint(generation + 1)
 
             # Evolve to next generation (except on last iteration)
-            if generation < self.num_generations - 1:
+            if i < self.num_generations - 1:
                 print("\nEvolving to next generation...")
                 self.population.evolve_generation()
 
         # Final results
         self._display_final_results()
+
+        # Out-of-sample test
+        best = self.population.best_trader
+        self._oos_results = None
+        if best:
+            self._oos_results = self._run_out_of_sample_test(best)
+
         self._save_final_results()
 
     def _display_statistics(self, stats: dict):
@@ -210,11 +333,40 @@ class GeneticAlgorithm:
         print(f"  Worst Fitness: {stats['worst_fitness']:.4f}")
         print(f"  Std Dev: {stats['std_fitness']:.4f}")
 
-        # Display best trader
+        # Display best trader and track gene changes
         best = self.population.get_best_trader()
         if best:
+            current_genes = best.get_genes()
+            current_fitness = stats['best_fitness']
+
+            # Print gene changes when best fitness improves
+            if self._prev_best_fitness is None:
+                print("GENE_CHANGE: initial")
+            elif current_fitness > self._prev_best_fitness:
+                for name, new_val in current_genes.items():
+                    old_val = self._prev_best_genes.get(name)
+                    if old_val is None:
+                        continue
+                    if isinstance(new_val, float):
+                        if old_val != 0 and abs(
+                            (new_val - old_val) / old_val
+                        ) < 0.01:
+                            continue
+                        print(
+                            f"GENE_CHANGE: {name}: "
+                            f"{old_val:.2f} -> {new_val:.2f}"
+                        )
+                    elif new_val != old_val:
+                        print(
+                            f"GENE_CHANGE: {name}: "
+                            f"{old_val} -> {new_val}"
+                        )
+
+            self._prev_best_genes = dict(current_genes)
+            self._prev_best_fitness = current_fitness
+
             print(f"\nBest Trader Genes:")
-            for name, value in best.get_genes().items():
+            for name, value in current_genes.items():
                 if isinstance(value, float):
                     print(f"  {name}: {value:.2f}")
                 else:
@@ -338,6 +490,103 @@ class GeneticAlgorithm:
                 print(f"  Unable to calculate benchmark: {e}")
                 benchmark = {'total_return': 0.0}
 
+    def _run_out_of_sample_test(self, best):
+        """
+        Run the best trader on out-of-sample (test) data
+        to evaluate generalization.
+
+        Args:
+            best: The best GeneticTrader from evolution
+
+        Returns:
+            Dictionary with out-of-sample results, or None
+        """
+        use_oos = getattr(config, 'USE_OUT_OF_SAMPLE_TEST', False)
+        test_start = getattr(config, 'TEST_START_DATE', None)
+        test_end = getattr(config, 'TEST_END_DATE', None)
+
+        if not use_oos or not test_start or not test_end:
+            return None
+
+        print("\n" + "=" * 60)
+        print("OUT-OF-SAMPLE TEST")
+        print("=" * 60)
+        print(f"Test period: {test_start} to {test_end}")
+
+        try:
+            # Create a new evaluator for the test period
+            test_evaluator = PortfolioFitnessEvaluator(
+                symbols=self.portfolio_symbols,
+                start_date=test_start,
+                end_date=test_end,
+            )
+
+            # Get detailed results on unseen data
+            test_results = test_evaluator.get_detailed_results(best)
+
+            print(f"\nOut-of-Sample Performance:")
+            print(f"  Total Return: {test_results['total_return']:.2f}%")
+            print(f"  Sharpe Ratio: {test_results['sharpe_ratio']:.4f}")
+            print(f"  Max Drawdown: {test_results['max_drawdown']:.2f}%")
+            print(f"  Total Trades: {test_results['trade_count']}")
+            print(f"  Win Rate: {test_results['win_rate']:.2f}%")
+
+            # Calculate test benchmark
+            test_benchmark = calculate_portfolio_buy_and_hold(
+                test_evaluator.data_feeds,
+                initial_capital=config.INITIAL_CASH,
+                allocation_pct=config.INITIAL_ALLOCATION_PCT,
+            )
+            test_comparison = compare_to_benchmark(
+                test_results, test_benchmark
+            )
+
+            print(f"\nTest Benchmark Comparison:")
+            print(f"  Buy-and-Hold Return: "
+                  f"{test_benchmark['total_return']:.2f}%")
+            print(f"  Strategy Outperformance: "
+                  f"{test_comparison['outperformance']:+.2f}%")
+            if test_comparison['beats_benchmark']:
+                print(f"  Strategy beats benchmark on unseen data!")
+            else:
+                print(f"  Strategy underperforms on unseen data")
+
+            return {
+                'enabled': True,
+                'test_start_date': test_start,
+                'test_end_date': test_end,
+                'performance': {
+                    'total_return': test_results.get('total_return'),
+                    'sharpe_ratio': test_results.get('sharpe_ratio'),
+                    'max_drawdown': test_results.get('max_drawdown'),
+                    'trade_count': test_results.get('trade_count'),
+                    'win_rate': test_results.get('win_rate'),
+                },
+                'benchmark': {
+                    'buy_and_hold_return': test_benchmark.get(
+                        'total_return'
+                    ),
+                    'outperformance': test_comparison.get(
+                        'outperformance'
+                    ),
+                    'beats_benchmark': test_comparison.get(
+                        'beats_benchmark'
+                    ),
+                },
+                'per_stock_performance': test_results.get(
+                    'per_stock_performance'
+                ),
+            }
+
+        except Exception as e:
+            print(f"\n  Out-of-sample test failed: {e}")
+            return {
+                'enabled': True,
+                'error': str(e),
+                'test_start_date': test_start,
+                'test_end_date': test_end,
+            }
+
     def _save_final_results(self):
         """Save final results to files."""
         # Save best trader
@@ -396,8 +645,14 @@ class GeneticAlgorithm:
         # Compare to benchmark
         comparison = compare_to_benchmark(results, benchmark) if best else {}
 
+        start_gen = self.population.generation - self.num_generations + 1
+        if start_gen < 0:
+            start_gen = 0
+
         summary = {
             'run_id': self.run_id,
+            'resumed_from': self.resumed_from,
+            'start_generation': start_gen,
             'mode': 'portfolio' if self.use_portfolio else 'single_stock',
             'symbol': self.symbol if not self.use_portfolio else None,
             'portfolio_symbols': self.portfolio_symbols if self.use_portfolio else None,
@@ -407,6 +662,58 @@ class GeneticAlgorithm:
             'end_date': self.end_date,
             'population_size': self.population_size,
             'num_generations': self.num_generations,
+            'config': {
+                'ga_parameters': {
+                    'population_size': self.population_size,
+                    'num_generations': self.num_generations,
+                    'mutation_rate': config.MUTATION_RATE,
+                    'crossover_rate': config.CROSSOVER_RATE,
+                    'elitism_count': config.ELITISM_COUNT,
+                    'tournament_size': config.TOURNAMENT_SIZE,
+                    'random_seed': config.RANDOM_SEED,
+                },
+                'portfolio': {
+                    'use_portfolio': config.USE_PORTFOLIO,
+                    'portfolio_size': config.PORTFOLIO_SIZE,
+                    'auto_select_portfolio': config.AUTO_SELECT_PORTFOLIO,
+                    'portfolio_sectors': getattr(config, 'PORTFOLIO_SECTORS', []),
+                    'portfolio_stocks': self.portfolio_symbols if self.use_portfolio else None,
+                },
+                'dates': {
+                    'train_start_date': self.start_date,
+                    'train_end_date': self.end_date,
+                    'test_start_date': getattr(config, 'TEST_START_DATE', None),
+                    'test_end_date': getattr(config, 'TEST_END_DATE', None),
+                },
+                'kfold': {
+                    'use_kfold_validation': getattr(config, 'USE_KFOLD_VALIDATION', False),
+                    'kfold_num_folds': getattr(config, 'KFOLD_NUM_FOLDS', 2),
+                    'kfold_fold_years': getattr(config, 'KFOLD_FOLD_YEARS', 3),
+                    'kfold_allow_overlap': getattr(config, 'KFOLD_ALLOW_OVERLAP', False),
+                    'kfold_weight_recent': getattr(config, 'KFOLD_WEIGHT_RECENT', False),
+                    'kfold_recent_weight_factor': getattr(config, 'KFOLD_RECENT_WEIGHT_FACTOR', 1.5),
+                    'kfold_min_bars_per_fold': getattr(config, 'KFOLD_MIN_BARS_PER_FOLD', 200),
+                },
+                'features': {
+                    'use_macro_data': getattr(config, 'USE_MACRO_DATA', False),
+                    'use_technical_indicators': getattr(config, 'USE_TECHNICAL_INDICATORS', False),
+                    'use_ensemble_signals': getattr(config, 'USE_ENSEMBLE_SIGNALS', False),
+                },
+                'backtrader': {
+                    'initial_cash': config.INITIAL_CASH,
+                    'commission': config.COMMISSION,
+                    'initial_allocation_pct': config.INITIAL_ALLOCATION_PCT,
+                },
+                'fitness': {
+                    'fitness_weights': config.FITNESS_WEIGHTS.copy(),
+                    'min_trades_required': config.MIN_TRADES_REQUIRED,
+                },
+                'execution': {
+                    'use_parallel_evaluation': config.USE_PARALLEL_EVALUATION,
+                    'max_parallel_workers': config.MAX_PARALLEL_WORKERS,
+                    'database_path': config.DATABASE_PATH,
+                },
+            },
             'best_trader': {
                 'generation': best.generation if best else None,
                 'fitness': best.fitness if best else None,
@@ -417,8 +724,18 @@ class GeneticAlgorithm:
                     'max_drawdown': results.get('max_drawdown'),
                     'trade_count': results.get('trade_count'),
                     'win_rate': results.get('win_rate'),
-                }
+                },
+                'per_stock_performance': results.get('per_stock_performance'),
             },
+            'elite_traders': [
+                {
+                    'generation': t.generation,
+                    'fitness': t.fitness,
+                    'chromosome': t.chromosome,
+                    'genes': t.get_genes(),
+                }
+                for t in self.population.get_top_traders(config.ELITISM_COUNT)
+            ],
             'benchmark': {
                 'buy_and_hold_return': benchmark.get('total_return'),
                 'allocation_pct': benchmark.get('allocation_pct', 100.0),
@@ -432,7 +749,8 @@ class GeneticAlgorithm:
                 'allow_overlap': getattr(config, 'KFOLD_ALLOW_OVERLAP', False),
                 'weight_recent': getattr(config, 'KFOLD_WEIGHT_RECENT', False),
                 'fold_results': results.get('kfold_results'),
-            }
+            },
+            'out_of_sample': self._oos_results,
         }
 
         # Convert all numpy/pandas types to native Python types for JSON serialization
@@ -493,13 +811,26 @@ class GeneticAlgorithm:
 
 # Main execution
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description='Run genetic algorithm evolution for trading strategies'
+    )
+    parser.add_argument(
+        '--resume',
+        type=str,
+        default=None,
+        help='Resume from a previous run by specifying its run_id '
+             '(e.g., 20260306_074305)'
+    )
+    args = parser.parse_args()
+
     # Create and run genetic algorithm
     ga = GeneticAlgorithm(
         symbol=config.TEST_SYMBOL,
         start_date=config.TRAIN_START_DATE,
         end_date=config.TRAIN_END_DATE,
         population_size=config.POPULATION_SIZE,
-        num_generations=config.NUM_GENERATIONS
+        num_generations=config.NUM_GENERATIONS,
+        resume_from=args.resume
     )
 
     # Run evolution

@@ -1,0 +1,238 @@
+{
+  "run_id": "20260306_172136",
+  "mode": "portfolio",
+  "symbol": null,
+  "portfolio_symbols": [
+    "EEFT",
+    "AMAT",
+    "ACLS",
+    "BELFA",
+    "AVT",
+    "AUDC",
+    "AMKR",
+    "ALOT",
+    "EPAM",
+    "DBD"
+  ],
+  "portfolio_size": 10,
+  "initial_allocation_pct": 80.0,
+  "start_date": "2012-01-01",
+  "end_date": "2020-12-31",
+  "population_size": 30,
+  "num_generations": 20,
+  "config": {
+    "ga_parameters": {
+      "population_size": 30,
+      "num_generations": 20,
+      "mutation_rate": 0.2,
+      "crossover_rate": 0.9,
+      "elitism_count": 6,
+      "tournament_size": 4,
+      "random_seed": 42
+    },
+    "portfolio": {
+      "use_portfolio": true,
+      "portfolio_size": 10,
+      "auto_select_portfolio": true,
+      "portfolio_sectors": [
+        "Technology"
+      ],
+      "portfolio_stocks": [
+        "EEFT",
+        "AMAT",
+        "ACLS",
+        "BELFA",
+        "AVT",
+        "AUDC",
+        "AMKR",
+        "ALOT",
+        "EPAM",
+        "DBD"
+      ]
+    },
+    "dates": {
+      "train_start_date": "2012-01-01",
+      "train_end_date": "2020-12-31",
+      "test_start_date": "2021-01-01",
+      "test_end_date": "2023-12-31"
+    },
+    "kfold": {
+      "use_kfold_validation": false,
+      "kfold_num_folds": 2,
+      "kfold_fold_years": 3,
+      "kfold_allow_overlap": false,
+      "kfold_weight_recent": false,
+      "kfold_recent_weight_factor": 1.5,
+      "kfold_min_bars_per_fold": 200
+    },
+    "features": {
+      "use_macro_data": true,
+      "use_technical_indicators": true,
+      "use_ensemble_signals": true
+    },
+    "backtrader": {
+      "initial_cash": 100000.0,
+      "commission": 0.001,
+      "initial_allocation_pct": 80.0
+    },
+    "fitness": {
+      "fitness_weights": {
+        "total_return": 0.4,
+        "sharpe_ratio": 0.24,
+        "max_drawdown": 0.24,
+        "win_rate": 0.12
+      },
+      "min_trades_required": 5
+    },
+    "execution": {
+      "use_parallel_evaluation": true,
+      "max_parallel_workers": null,
+      "database_path": "/Users/fred/alpaca_Big_polygon.db"
+    }
+  },
+  "best_trader": {
+    "generation": 19,
+    "fitness": 198.4898629574296,
+    "genes": {
+      "ma_short_period": 5,
+      "ma_long_period": 43,
+      "ma_type": 1,
+      "stop_loss_pct": 8.706269978970962,
+      "take_profit_pct": 8.937545441969867,
+      "position_size_pct": 24.882473209538404,
+      "macro_enabled": 1,
+      "macro_weight": 0.07752658314633576,
+      "macro_vix_threshold": 34.53069613145076,
+      "macro_vix_position_scale": 0.7365965404319801,
+      "macro_yc_threshold": 0.32374262390149044,
+      "macro_yc_action": 0,
+      "macro_rate_threshold": 4.2834682247889475,
+      "macro_rate_position_scale": 0.8552283285985347,
+      "macro_cpi_threshold": 7.945625418022758,
+      "macro_cpi_position_scale": 0.33086994887257665,
+      "macro_unemp_threshold": 8.325075046425566,
+      "macro_unemp_action": 2,
+      "macro_risk_stop_adj": 1.9742671603031208,
+      "macro_risk_tp_adj": 1.8925338068383404,
+      "macro_regime_count_req": 2,
+      "ti_enabled": 0,
+      "ti_weight": 0.09340882380830562,
+      "ti_rsi_overbought": 72,
+      "ti_rsi_oversold": 19,
+      "ti_adx_threshold": 35,
+      "ti_adx_position_scale": 0.33812165296124164,
+      "ti_natr_threshold": 4.0391742026575805,
+      "ti_natr_risk_action": 2,
+      "ti_mfi_overbought": 81,
+      "ti_mfi_oversold": 14,
+      "ti_macdhist_confirm": 0,
+      "ti_macdhist_exit_confirm": 0,
+      "ensemble_enabled": 1,
+      "sig_ma_weight": 0.41630294307489524,
+      "sig_bb_weight": 0.0670480131604545,
+      "sig_stoch_weight": 0.06567288545139427,
+      "sig_macd_weight": 0.47829904493992315,
+      "sig_rsi_weight": 0.3151701752990994,
+      "sig_buy_threshold": 0.12189162776958436,
+      "sig_sell_threshold": -0.687029926897959,
+      "sig_bb_period_idx": 0,
+      "sig_stoch_ob": 70,
+      "sig_stoch_os": 23,
+      "sig_rsi_ob": 69,
+      "sig_rsi_os": 26
+    },
+    "performance": {
+      "total_return": 486.14036189000024,
+      "sharpe_ratio": 1.0003493570989577,
+      "max_drawdown": -22.833712362104418,
+      "trade_count": 717,
+      "win_rate": 59.274755927475596
+    },
+    "per_stock_performance": {
+      "EEFT": {
+        "trades": 56,
+        "won": 40,
+        "lost": 16,
+        "pnl": 37919.54,
+        "win_rate": 71.42857142857143
+      },
+      "AMAT": {
+        "trades": 63,
+        "won": 42,
+        "lost": 21,
+        "pnl": 54487.55,
+        "win_rate": 66.66666666666666
+      },
+      "ACLS": {
+        "trades": 82,
+        "won": 49,
+        "lost": 33,
+        "pnl": 76526.47,
+        "win_rate": 59.756097560975604
+      },
+      "BELFA": {
+        "trades": 85,
+        "won": 48,
+        "lost": 37,
+        "pnl": 29085.53,
+        "win_rate": 56.470588235294116
+      },
+      "AVT": {
+        "trades": 38,
+        "won": 22,
+        "lost": 16,
+        "pnl": 6569.89,
+        "win_rate": 57.89473684210527
+      },
+      "AUDC": {
+        "trades": 100,
+        "won": 57,
+        "lost": 43,
+        "pnl": 54834.73,
+        "win_rate": 56.99999999999999
+      },
+      "AMKR": {
+        "trades": 85,
+        "won": 50,
+        "lost": 35,
+        "pnl": 56703.61,
+        "win_rate": 58.82352941176471
+      },
+      "ALOT": {
+        "trades": 50,
+        "won": 27,
+        "lost": 23,
+        "pnl": 15271.99,
+        "win_rate": 54.0
+      },
+      "EPAM": {
+        "trades": 61,
+        "won": 43,
+        "lost": 18,
+        "pnl": 72517.09,
+        "win_rate": 70.49180327868852
+      },
+      "DBD": {
+        "trades": 89,
+        "won": 47,
+        "lost": 42,
+        "pnl": 75954.18,
+        "win_rate": 52.80898876404494
+      }
+    }
+  },
+  "benchmark": {
+    "buy_and_hold_return": 526.9634705649389,
+    "allocation_pct": 80.0,
+    "strategy_outperformance": -40.82310867493868,
+    "beats_benchmark": false
+  },
+  "kfold": {
+    "enabled": false,
+    "num_folds": 1,
+    "fold_years": 3,
+    "allow_overlap": false,
+    "weight_recent": false,
+    "fold_results": null
+  }
+}

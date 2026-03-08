@@ -3,23 +3,26 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/evolution_result.dart';
 import '../../viewmodels/results_viewmodel.dart';
+import 'evolution_screen.dart';
 import 'results_dashboard_screen.dart';
 
 /// Screen showing a list of all past evolution runs
-class ResultsListScreen extends StatelessWidget {
+class ResultsListScreen extends StatefulWidget {
   const ResultsListScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ResultsViewModel()..loadResults(),
-      child: const _ResultsListContent(),
-    );
-  }
+  State<ResultsListScreen> createState() => _ResultsListScreenState();
 }
 
-class _ResultsListContent extends StatelessWidget {
-  const _ResultsListContent();
+class _ResultsListScreenState extends State<ResultsListScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Refresh results after build completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ResultsViewModel>().loadResults();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -161,6 +164,24 @@ class _ResultCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.fast_forward),
+                    tooltip: 'Resume Training',
+                    iconSize: 20,
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.all(4),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => EvolutionScreen(
+                            resumeRunId: result.runId,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
                   _BenchmarkBadge(beats: result.benchmark.beatsBenchmark),
                 ],
               ),

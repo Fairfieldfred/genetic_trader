@@ -100,6 +100,34 @@ class Population:
         evaluated_traders = [t for t in self.traders if t.fitness is not None]
         return sorted(evaluated_traders, key=lambda t: t.fitness, reverse=True)[:n]
 
+    def seed_population(
+        self,
+        seed_traders: List[GeneticTrader],
+        start_generation: int = 0
+    ):
+        """
+        Replace the random population with seed traders + random fill.
+        Used when resuming from a previous run.
+
+        Args:
+            seed_traders: Previously evolved traders to seed with
+            start_generation: Generation number to resume from
+        """
+        self.generation = start_generation
+        self.traders = []
+
+        # Add seed traders (up to population size)
+        for trader in seed_traders[:self.size]:
+            trader.fitness = None  # Will be re-evaluated
+            self.traders.append(trader)
+
+        # Fill remaining slots with random traders
+        remaining = self.size - len(self.traders)
+        for _ in range(remaining):
+            trader = GeneticTrader()
+            trader.generation = self.generation
+            self.traders.append(trader)
+
     def evolve_generation(
         self,
         elitism_count: int = None,

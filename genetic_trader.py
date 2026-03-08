@@ -108,6 +108,23 @@ class GeneticTrader:
         index = config.GENE_ORDER.index(gene_name)
         return self.chromosome[index]
 
+    @classmethod
+    def from_dict(cls, data: dict) -> 'GeneticTrader':
+        """
+        Reconstruct a trader from saved dictionary data.
+
+        Args:
+            data: Dictionary with 'chromosome' and optionally
+                  'fitness' and 'generation' keys
+
+        Returns:
+            Reconstructed GeneticTrader instance
+        """
+        trader = cls(chromosome=data['chromosome'])
+        trader.fitness = data.get('fitness')
+        trader.generation = data.get('generation', 0)
+        return trader
+
     def set_fitness(self, fitness: float):
         """Set the fitness score for this trader."""
         self.fitness = fitness

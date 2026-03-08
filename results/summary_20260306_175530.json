@@ -1,0 +1,211 @@
+{
+  "run_id": "20260306_175530",
+  "mode": "portfolio",
+  "symbol": null,
+  "portfolio_symbols": [
+    "EEFT",
+    "AMAT",
+    "ACLS",
+    "BELFA",
+    "AVT",
+    "AUDC",
+    "AMKR"
+  ],
+  "portfolio_size": 7,
+  "initial_allocation_pct": 80.0,
+  "start_date": "2012-01-01",
+  "end_date": "2020-12-31",
+  "population_size": 30,
+  "num_generations": 20,
+  "config": {
+    "ga_parameters": {
+      "population_size": 30,
+      "num_generations": 20,
+      "mutation_rate": 0.25,
+      "crossover_rate": 0.9,
+      "elitism_count": 5,
+      "tournament_size": 4,
+      "random_seed": 42
+    },
+    "portfolio": {
+      "use_portfolio": true,
+      "portfolio_size": 7,
+      "auto_select_portfolio": true,
+      "portfolio_sectors": [
+        "Technology"
+      ],
+      "portfolio_stocks": [
+        "EEFT",
+        "AMAT",
+        "ACLS",
+        "BELFA",
+        "AVT",
+        "AUDC",
+        "AMKR"
+      ]
+    },
+    "dates": {
+      "train_start_date": "2012-01-01",
+      "train_end_date": "2020-12-31",
+      "test_start_date": "2021-01-01",
+      "test_end_date": "2023-12-31"
+    },
+    "kfold": {
+      "use_kfold_validation": false,
+      "kfold_num_folds": 2,
+      "kfold_fold_years": 3,
+      "kfold_allow_overlap": false,
+      "kfold_weight_recent": false,
+      "kfold_recent_weight_factor": 1.5,
+      "kfold_min_bars_per_fold": 200
+    },
+    "features": {
+      "use_macro_data": true,
+      "use_technical_indicators": true,
+      "use_ensemble_signals": true
+    },
+    "backtrader": {
+      "initial_cash": 100000.0,
+      "commission": 0.001,
+      "initial_allocation_pct": 80.0
+    },
+    "fitness": {
+      "fitness_weights": {
+        "total_return": 0.4,
+        "sharpe_ratio": 0.24,
+        "max_drawdown": 0.24,
+        "win_rate": 0.12
+      },
+      "min_trades_required": 5
+    },
+    "execution": {
+      "use_parallel_evaluation": true,
+      "max_parallel_workers": null,
+      "database_path": "/Users/fred/alpaca_Big_polygon.db"
+    }
+  },
+  "best_trader": {
+    "generation": 19,
+    "fitness": 101.5844594088627,
+    "genes": {
+      "ma_short_period": 27,
+      "ma_long_period": 58,
+      "ma_type": 0,
+      "stop_loss_pct": 7.34029189081093,
+      "take_profit_pct": 14.311956982957422,
+      "position_size_pct": 24.57274875198587,
+      "macro_enabled": 1,
+      "macro_weight": 0.8255095808008635,
+      "macro_vix_threshold": 31.55405300306078,
+      "macro_vix_position_scale": 0.33644235159575625,
+      "macro_yc_threshold": -0.8079235765299155,
+      "macro_yc_action": 2,
+      "macro_rate_threshold": 4.639445638043633,
+      "macro_rate_position_scale": 0.30686547194652924,
+      "macro_cpi_threshold": 5.913938267786196,
+      "macro_cpi_position_scale": 0.45540911726062083,
+      "macro_unemp_threshold": 8.04018728375981,
+      "macro_unemp_action": 2,
+      "macro_risk_stop_adj": 1.3194963602250556,
+      "macro_risk_tp_adj": 0.8004448861927153,
+      "macro_regime_count_req": 4,
+      "ti_enabled": 0,
+      "ti_weight": 0.35808698965564534,
+      "ti_rsi_overbought": 64,
+      "ti_rsi_oversold": 25,
+      "ti_adx_threshold": 36,
+      "ti_adx_position_scale": 0.3121458376758196,
+      "ti_natr_threshold": 2.071866049769244,
+      "ti_natr_risk_action": 1,
+      "ti_mfi_overbought": 87,
+      "ti_mfi_oversold": 7,
+      "ti_macdhist_confirm": 0,
+      "ti_macdhist_exit_confirm": 1,
+      "ensemble_enabled": 0,
+      "sig_ma_weight": 0.652144893998522,
+      "sig_bb_weight": 0.7810078131736886,
+      "sig_stoch_weight": 0.44394642868351375,
+      "sig_macd_weight": 0.09326277618383594,
+      "sig_rsi_weight": 0.2121454212556535,
+      "sig_buy_threshold": 0.42304262417773775,
+      "sig_sell_threshold": -0.4771512333938059,
+      "sig_bb_period_idx": 1,
+      "sig_stoch_ob": 72,
+      "sig_stoch_os": 22,
+      "sig_rsi_ob": 61,
+      "sig_rsi_os": 20
+    },
+    "performance": {
+      "total_return": 249.48987425999994,
+      "sharpe_ratio": 0.6167270967313058,
+      "max_drawdown": -24.786575768480304,
+      "trade_count": 140,
+      "win_rate": 52.142857142857146
+    },
+    "per_stock_performance": {
+      "EEFT": {
+        "trades": 16,
+        "won": 9,
+        "lost": 7,
+        "pnl": 23028.22,
+        "win_rate": 56.25
+      },
+      "AMAT": {
+        "trades": 19,
+        "won": 14,
+        "lost": 5,
+        "pnl": 39948.48,
+        "win_rate": 73.68421052631578
+      },
+      "ACLS": {
+        "trades": 22,
+        "won": 8,
+        "lost": 14,
+        "pnl": 80196.11,
+        "win_rate": 36.36363636363637
+      },
+      "BELFA": {
+        "trades": 16,
+        "won": 7,
+        "lost": 9,
+        "pnl": 26433.88,
+        "win_rate": 43.75
+      },
+      "AVT": {
+        "trades": 27,
+        "won": 11,
+        "lost": 16,
+        "pnl": -6532.24,
+        "win_rate": 40.74074074074074
+      },
+      "AUDC": {
+        "trades": 19,
+        "won": 10,
+        "lost": 9,
+        "pnl": 38068.29,
+        "win_rate": 52.63157894736842
+      },
+      "AMKR": {
+        "trades": 21,
+        "won": 14,
+        "lost": 7,
+        "pnl": 48347.12,
+        "win_rate": 66.66666666666666
+      }
+    }
+  },
+  "benchmark": {
+    "buy_and_hold_return": 474.6450664848909,
+    "allocation_pct": 80.0,
+    "strategy_outperformance": -225.15519222489095,
+    "beats_benchmark": false
+  },
+  "kfold": {
+    "enabled": false,
+    "num_folds": 1,
+    "fold_years": 3,
+    "allow_overlap": false,
+    "weight_recent": false,
+    "fold_results": null
+  }
+}

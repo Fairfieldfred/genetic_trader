@@ -14,6 +14,7 @@ class EvolutionViewModel extends ChangeNotifier {
   EvolutionProgress _progress = EvolutionProgress();
   final List<FitnessHistoryEntry> _fitnessHistory = [];
   int _lastRecordedGeneration = -1;
+  List<GeneChange> _pendingGeneChanges = [];
 
   String? _runId;
 
@@ -36,7 +37,7 @@ class EvolutionViewModel extends ChangeNotifier {
   double get progressPercentage => _progress.progress * 100;
 
   /// Start evolution process
-  Future<void> startEvolution() async {
+  Future<void> startEvolution({String? resumeRunId}) async {
     if (_isRunning) return;
 
     // Reset state
@@ -48,6 +49,7 @@ class EvolutionViewModel extends ChangeNotifier {
     notifyListeners();
 
     await _pythonBridge.startEvolution(
+      resumeRunId: resumeRunId,
       onOutput: (line) {
         _outputLines.add(line);
 
@@ -63,23 +65,41 @@ class EvolutionViewModel extends ChangeNotifier {
         if (progress.runId != null) {
           _runId = progress.runId;
         }
+
+        // Accumulate gene changes for current generation
+        if (progress.geneChanges != null) {
+          for (final gc in progress.geneChanges!) {
+            _pendingGeneChanges.add(GeneChange(
+              gene: gc.gene,
+              oldValue: gc.oldValue,
+              newValue: gc.newValue,
+            ));
+          }
+        }
+
         // Merge progress updates
         _progress = _progress.copyWith(
           currentGeneration:
-              progress.currentGeneration ?? _progress.currentGeneration,
+              progress.currentGeneration ??
+              _progress.currentGeneration,
           totalGenerations:
-              progress.totalGenerations ?? _progress.totalGenerations,
-          bestFitness: progress.bestFitness ?? _progress.bestFitness,
-          avgFitness: progress.avgFitness ?? _progress.avgFitness,
-          worstFitness: progress.worstFitness ?? _progress.worstFitness,
+              progress.totalGenerations ??
+              _progress.totalGenerations,
+          bestFitness:
+              progress.bestFitness ?? _progress.bestFitness,
+          avgFitness:
+              progress.avgFitness ?? _progress.avgFitness,
+          worstFitness:
+              progress.worstFitness ?? _progress.worstFitness,
           stdDev: progress.stdDev ?? _progress.stdDev,
         );
 
-        // Detect generation complete: when worst fitness arrives and we
-        // have all metrics for a generation we haven't recorded yet
+        // Detect generation complete: when worst fitness arrives
+        // and we have all metrics for a new generation
         if (progress.worstFitness != null &&
             _progress.currentGeneration != null &&
-            _progress.currentGeneration! > _lastRecordedGeneration &&
+            _progress.currentGeneration! >
+                _lastRecordedGeneration &&
             _progress.bestFitness != null &&
             _progress.avgFitness != null) {
           _fitnessHistory.add(FitnessHistoryEntry(
@@ -88,8 +108,13 @@ class EvolutionViewModel extends ChangeNotifier {
             avgFitness: _progress.avgFitness!,
             worstFitness: _progress.worstFitness!,
             stdFitness: _progress.stdDev ?? 0.0,
+            geneChanges: _pendingGeneChanges.isNotEmpty
+                ? List.of(_pendingGeneChanges)
+                : null,
           ));
-          _lastRecordedGeneration = _progress.currentGeneration!;
+          _lastRecordedGeneration =
+              _progress.currentGeneration!;
+          _pendingGeneChanges = [];
         }
 
         notifyListeners();
@@ -126,6 +151,7 @@ class EvolutionViewModel extends ChangeNotifier {
     _outputLines.clear();
     _fitnessHistory.clear();
     _lastRecordedGeneration = -1;
+    _pendingGeneChanges = [];
     _progress = EvolutionProgress();
     _pythonBridge.clearOutput();
     notifyListeners();

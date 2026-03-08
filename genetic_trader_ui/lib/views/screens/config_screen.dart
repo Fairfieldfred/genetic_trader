@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/config_viewmodel.dart';
@@ -54,6 +55,67 @@ class ConfigScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              // Database Selection
+              _buildSection(
+                context,
+                title: 'Database',
+                icon: Icons.storage,
+                subtitle: config.databasePath,
+                children: [
+                  _DatabaseSelector(
+                    currentPath: config.databasePath,
+                    onChanged: viewModel.updateDatabasePath,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Train / Test Split
+              _buildSection(
+                context,
+                title: 'Train / Test Split',
+                icon: Icons.call_split,
+                children: [
+                  SwitchListTile(
+                    title: const Text('Out-of-Sample Testing'),
+                    subtitle: Text(
+                      config.useOutOfSampleTest
+                          ? 'Train on ${config.trainingYears} years, '
+                              'test on remaining data'
+                          : 'Use full date range for training',
+                    ),
+                    value: config.useOutOfSampleTest,
+                    onChanged: (value) {
+                      viewModel.updateUseOutOfSampleTest(value);
+                    },
+                  ),
+                  if (config.useOutOfSampleTest) ...[
+                    _buildSliderTile(
+                      context,
+                      title: 'Training Years',
+                      subtitle:
+                          'Test period uses the remaining data',
+                      value: config.trainingYears.toDouble(),
+                      min: 1,
+                      max: 9,
+                      divisions: 8,
+                      label: '${config.trainingYears} years',
+                      onChanged: (value) {
+                        viewModel.updateTrainingYears(
+                          value.toInt(),
+                        );
+                      },
+                    ),
+                    _TrainTestDateDisplay(
+                      trainStartDate: config.trainStartDate,
+                      testEndDate: config.testEndDate,
+                      trainingYears: config.trainingYears,
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+
               // Portfolio Settings
               _buildSection(
                 context,
@@ -88,6 +150,14 @@ class ConfigScreen extends StatelessWidget {
                         viewModel.updatePortfolioSize(
                           value.toInt(),
                         );
+                      },
+                    ),
+                  if (config.autoSelectPortfolio)
+                    _SectorFilterChips(
+                      selectedSectors: config.portfolioSectors,
+                      onToggle: viewModel.togglePortfolioSector,
+                      onClearAll: () {
+                        viewModel.updatePortfolioSectors([]);
                       },
                     ),
                   if (!config.autoSelectPortfolio)
@@ -809,6 +879,354 @@ class ConfigScreen extends StatelessWidget {
               Navigator.pop(context);
             },
             child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Database selector with preset options and file browser.
+class _DatabaseSelector extends StatelessWidget {
+  const _DatabaseSelector({
+    required this.currentPath,
+    required this.onChanged,
+  });
+
+  final String currentPath;
+  final ValueChanged<String> onChanged;
+
+  static const _projectDir =
+      '/Users/fred/Development/Genetic Trader';
+
+  static const _presets = [
+    _DbPreset(
+      label: 'S&P 500 (SPY_Data.db)',
+      path: '$_projectDir/SPY_Data.db',
+      description: '503 symbols, 10 years, with TI',
+    ),
+    _DbPreset(
+      label: 'Alpaca/Polygon',
+      path: '/Users/fred/alpaca_Big_polygon.db',
+      description: '4656 symbols, 10 years, with TI',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final isPreset = _presets.any((p) => p.path == currentPath);
+    final dropdownValue = isPreset ? currentPath : '__custom__';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: dropdownValue,
+          decoration: const InputDecoration(
+            labelText: 'Database Source',
+            border: OutlineInputBorder(),
+          ),
+          isExpanded: true,
+          items: [
+            for (final preset in _presets)
+              DropdownMenuItem(
+                value: preset.path,
+                child: Text(preset.label),
+              ),
+            if (!isPreset)
+              DropdownMenuItem(
+                value: '__custom__',
+                child: Text(
+                  'Custom: ${_fileName(currentPath)}',
+                ),
+              ),
+          ],
+          onChanged: (value) {
+            if (value != null && value != '__custom__') {
+              onChanged(value);
+            }
+          },
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _presetDescription(currentPath) ??
+                    currentPath,
+                style:
+                    Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
+                        ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            TextButton.icon(
+              icon: const Icon(Icons.folder_open, size: 18),
+              label: const Text('Browse'),
+              onPressed: () async {
+                final result =
+                    await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['db', 'sqlite', 'sqlite3'],
+                  dialogTitle: 'Select Database File',
+                );
+                if (result != null &&
+                    result.files.single.path != null) {
+                  onChanged(result.files.single.path!);
+                }
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String? _presetDescription(String path) {
+    for (final preset in _presets) {
+      if (preset.path == path) return preset.description;
+    }
+    return null;
+  }
+
+  static String _fileName(String path) {
+    final idx = path.lastIndexOf('/');
+    return idx >= 0 ? path.substring(idx + 1) : path;
+  }
+}
+
+class _DbPreset {
+  const _DbPreset({
+    required this.label,
+    required this.path,
+    required this.description,
+  });
+
+  final String label;
+  final String path;
+  final String description;
+}
+
+/// Displays computed train and test date ranges.
+class _TrainTestDateDisplay extends StatelessWidget {
+  const _TrainTestDateDisplay({
+    required this.trainStartDate,
+    required this.testEndDate,
+    required this.trainingYears,
+  });
+
+  final String trainStartDate;
+  final String testEndDate;
+  final int trainingYears;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = DateTime.tryParse(trainStartDate);
+    final end = DateTime.tryParse(testEndDate);
+    if (start == null || end == null) {
+      return const SizedBox.shrink();
+    }
+
+    final splitDate = DateTime(
+      start.year + trainingYears,
+      start.month,
+      start.day,
+    );
+    final testStart = splitDate.add(const Duration(days: 1));
+    final totalDays = end.difference(start).inDays;
+    final trainDays = splitDate.difference(start).inDays;
+    final testDays = end.difference(testStart).inDays;
+
+    final trainPct = totalDays > 0
+        ? (trainDays / totalDays * 100).toStringAsFixed(0)
+        : '0';
+    final testPct = totalDays > 0
+        ? (testDays / totalDays * 100).toStringAsFixed(0)
+        : '0';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 8,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _DateRangeChip(
+                  label: 'Train ($trainPct%)',
+                  startDate: _fmt(start),
+                  endDate: _fmt(splitDate),
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _DateRangeChip(
+                  label: 'Test ($testPct%)',
+                  startDate: _fmt(testStart),
+                  endDate: _fmt(end),
+                  color: Theme.of(context).colorScheme.tertiary,
+                ),
+              ),
+            ],
+          ),
+          if (testDays <= 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Warning: No test data remaining. '
+                'Reduce training years.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _fmt(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+}
+
+/// A colored chip showing a date range label.
+class _DateRangeChip extends StatelessWidget {
+  const _DateRangeChip({
+    required this.label,
+    required this.startDate,
+    required this.endDate,
+    required this.color,
+  });
+
+  final String label;
+  final String startDate;
+  final String endDate;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: color,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$startDate\n$endDate',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Sector filter chips for narrowing auto-selected stocks
+class _SectorFilterChips extends StatelessWidget {
+  static const List<String> _availableSectors = [
+    'Communication Services',
+    'Consumer Discretionary',
+    'Consumer Staples',
+    'Energy',
+    'Financials',
+    'Health Care',
+    'Industrials',
+    'Information Technology',
+    'Materials',
+    'Real Estate',
+    'Utilities',
+  ];
+
+  final List<String> selectedSectors;
+  final ValueChanged<String> onToggle;
+  final VoidCallback onClearAll;
+
+  const _SectorFilterChips({
+    required this.selectedSectors,
+    required this.onToggle,
+    required this.onClearAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 8,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.category,
+                size: 20,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Sector Filter',
+                style: theme.textTheme.titleSmall,
+              ),
+              const Spacer(),
+              if (selectedSectors.isNotEmpty)
+                TextButton(
+                  onPressed: onClearAll,
+                  child: const Text('Clear All'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            selectedSectors.isEmpty
+                ? 'All sectors eligible (no filter)'
+                : '${selectedSectors.length} sector'
+                    '${selectedSectors.length == 1 ? '' : 's'}'
+                    ' selected',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: _availableSectors.map((sector) {
+              final isSelected =
+                  selectedSectors.contains(sector);
+              return FilterChip(
+                label: Text(sector),
+                selected: isSelected,
+                onSelected: (_) => onToggle(sector),
+                showCheckmark: true,
+              );
+            }).toList(),
           ),
         ],
       ),

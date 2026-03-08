@@ -8,6 +8,23 @@ class ConfigViewModel extends ChangeNotifier {
 
   GeneticConfig get config => _config;
 
+  // Database Settings
+  void updateDatabasePath(String path) {
+    _config = _config.copyWith(databasePath: path);
+    notifyListeners();
+  }
+
+  // Out-of-Sample Testing
+  void updateUseOutOfSampleTest(bool value) {
+    _config = _config.copyWith(useOutOfSampleTest: value);
+    notifyListeners();
+  }
+
+  void updateTrainingYears(int years) {
+    _config = _config.copyWith(trainingYears: years);
+    notifyListeners();
+  }
+
   // Portfolio Settings
   void updateUsePortfolio(bool value) {
     _config = _config.copyWith(usePortfolio: value);
@@ -31,6 +48,22 @@ class ConfigViewModel extends ChangeNotifier {
 
   void updatePortfolioStocks(List<String> stocks) {
     _config = _config.copyWith(portfolioStocks: stocks);
+    notifyListeners();
+  }
+
+  void updatePortfolioSectors(List<String> sectors) {
+    _config = _config.copyWith(portfolioSectors: sectors);
+    notifyListeners();
+  }
+
+  void togglePortfolioSector(String sector) {
+    final current = List<String>.from(_config.portfolioSectors);
+    if (current.contains(sector)) {
+      current.remove(sector);
+    } else {
+      current.add(sector);
+    }
+    _config = _config.copyWith(portfolioSectors: current);
     notifyListeners();
   }
 

@@ -349,6 +349,9 @@ class PortfolioGeneticStrategy(GeneticStrategy):
         # Track pending orders per stock to prevent duplicates
         self.pending_orders = {}  # symbol -> order
 
+        # Per-stock trade tracking
+        self.trades_by_symbol = {}  # symbol -> {trades, won, lost, pnl}
+
     def prenext(self):
         """Called before minimum period is met for all indicators."""
         # Make initial allocation on first bar, even before indicators are ready
@@ -926,6 +929,36 @@ class PortfolioGeneticStrategy(GeneticStrategy):
         # Clear pending order tracking for this symbol
         self.pending_orders.pop(symbol, None)
         self.order = None
+
+    def notify_trade(self, trade):
+        """Track per-symbol trade results from closed trades."""
+        if not trade.isclosed:
+            return
+
+        # Update aggregate counters
+        self.trade_count += 1
+        if trade.pnl > 0:
+            self.winning_trades += 1
+        else:
+            self.losing_trades += 1
+
+        # Track per-symbol data
+        symbol = trade.data._name if hasattr(trade.data, '_name') else 'Unknown'
+        if symbol not in self.trades_by_symbol:
+            self.trades_by_symbol[symbol] = {
+                'trades': 0,
+                'won': 0,
+                'lost': 0,
+                'pnl': 0.0,
+            }
+
+        entry = self.trades_by_symbol[symbol]
+        entry['trades'] += 1
+        if trade.pnlcomm > 0:
+            entry['won'] += 1
+        else:
+            entry['lost'] += 1
+        entry['pnl'] += trade.pnlcomm
 
 
 def create_strategy_from_trader(trader: GeneticTrader, use_portfolio: bool = False, initial_allocation_pct: float = 0.0):

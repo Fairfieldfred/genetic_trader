@@ -371,6 +371,25 @@ class PortfolioFitnessEvaluator:
         won_trades = trade_analysis.get('won', {}).get('total', 0)
         win_rate = (won_trades / total_trades * 100) if total_trades > 0 else 0.0
 
+        # Extract per-stock trade data from strategy
+        per_stock_performance = {}
+        for symbol in symbols:
+            stock_data = strat.trades_by_symbol.get(symbol, {
+                'trades': 0, 'won': 0, 'lost': 0, 'pnl': 0.0,
+            })
+            trades_count = stock_data['trades']
+            per_stock_performance[symbol] = {
+                'trades': trades_count,
+                'won': stock_data['won'],
+                'lost': stock_data['lost'],
+                'pnl': round(stock_data['pnl'], 2),
+                'win_rate': (
+                    (stock_data['won'] / trades_count * 100)
+                    if trades_count > 0
+                    else 0.0
+                ),
+            }
+
         return {
             'starting_value': starting_value,
             'ending_value': ending_value,
@@ -380,6 +399,7 @@ class PortfolioFitnessEvaluator:
             'win_rate': win_rate,
             'trade_count': total_trades,
             'winning_trades': won_trades,
+            'per_stock_performance': per_stock_performance,
         }
 
     def evaluate_population(self, traders: List[GeneticTrader]) -> List[GeneticTrader]:
@@ -482,6 +502,27 @@ class PortfolioFitnessEvaluator:
                 r['winning_trades'] for r in valid
             ),
         }
+
+        # Aggregate per-stock data across folds
+        combined_per_stock = {}
+        for r in valid:
+            for sym, data in r.get('per_stock_performance', {}).items():
+                if sym not in combined_per_stock:
+                    combined_per_stock[sym] = {
+                        'trades': 0, 'won': 0, 'lost': 0, 'pnl': 0.0,
+                    }
+                combined_per_stock[sym]['trades'] += data['trades']
+                combined_per_stock[sym]['won'] += data['won']
+                combined_per_stock[sym]['lost'] += data['lost']
+                combined_per_stock[sym]['pnl'] += data['pnl']
+        for sym, data in combined_per_stock.items():
+            data['win_rate'] = (
+                (data['won'] / data['trades'] * 100)
+                if data['trades'] > 0 else 0.0
+            )
+            data['pnl'] = round(data['pnl'], 2)
+        aggregate['per_stock_performance'] = combined_per_stock
+
         aggregate['genes'] = trader.get_genes()
         aggregate['fitness'] = self.calculate_fitness(trader)
         aggregate['num_stocks'] = len(self.valid_symbols)
@@ -541,7 +582,8 @@ class PortfolioFitnessEvaluator:
 def select_random_portfolio(
     size: int = 20,
     min_records: int = 2000,
-    seed: int = None
+    seed: int = None,
+    sectors: List[str] = None
 ) -> List[str]:
     """
     Randomly select stocks for portfolio from database.
@@ -550,6 +592,7 @@ def select_random_portfolio(
         size: Number of stocks to select
         min_records: Minimum number of data records required
         seed: Random seed for reproducibility
+        sectors: Optional list of sectors to filter by (e.g. ['Technology', 'Healthcare'])
 
     Returns:
         List of stock symbols
@@ -563,36 +606,56 @@ def select_random_portfolio(
     conn = sqlite3.connect(config.DATABASE_PATH)
     cursor = conn.cursor()
 
-    # Detect whether daily_indicators has a 'sector' column
-    cursor.execute("PRAGMA table_info(daily_indicators)")
-    columns = {row[1] for row in cursor.fetchall()}
-    has_sector = 'sector' in columns
+    use_sector_filter = sectors and len(sectors) > 0
 
-    # Get all stocks with sufficient data
-    if has_sector:
-        query = """
-            SELECT DISTINCT symbol, sector
-            FROM daily_indicators
-            GROUP BY symbol
+    if use_sector_filter:
+        # Join with stocks table to filter by sector
+        placeholders = ','.join(['?' for _ in sectors])
+        query = f"""
+            SELECT di.symbol, s.sector
+            FROM daily_indicators di
+            JOIN stocks s ON di.symbol = s.symbol
+            WHERE s.sector IN ({placeholders})
+            GROUP BY di.symbol
             HAVING COUNT(*) >= ?
-            ORDER BY symbol
+            ORDER BY di.symbol
         """
+        params = list(sectors) + [min_records]
     else:
-        query = """
-            SELECT DISTINCT symbol
-            FROM daily_indicators
-            GROUP BY symbol
-            HAVING COUNT(*) >= ?
-            ORDER BY symbol
-        """
+        # Check if stocks table has sector for display purposes
+        cursor.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type='table' AND name='stocks'"
+        )
+        has_stocks_table = cursor.fetchone() is not None
 
-    cursor.execute(query, (min_records,))
+        if has_stocks_table:
+            query = """
+                SELECT di.symbol, COALESCE(s.sector, 'N/A')
+                FROM daily_indicators di
+                LEFT JOIN stocks s ON di.symbol = s.symbol
+                GROUP BY di.symbol
+                HAVING COUNT(*) >= ?
+                ORDER BY di.symbol
+            """
+        else:
+            query = """
+                SELECT symbol
+                FROM daily_indicators
+                GROUP BY symbol
+                HAVING COUNT(*) >= ?
+                ORDER BY symbol
+            """
+        params = [min_records]
+
+    cursor.execute(query, params)
     available_stocks = cursor.fetchall()
     conn.close()
 
     if len(available_stocks) < size:
+        sector_msg = f" in sectors {sectors}" if use_sector_filter else ""
         raise ValueError(
-            f"Not enough stocks with {min_records}+ records. "
+            f"Not enough stocks with {min_records}+ records{sector_msg}. "
             f"Found {len(available_stocks)}, need {size}"
         )
 
@@ -600,9 +663,11 @@ def select_random_portfolio(
     selected = rand.sample(available_stocks, size)
     symbols = [stock[0] for stock in selected]
 
-    print(f"\nRandomly selected {size} stocks:")
+    has_sector_col = len(selected[0]) > 1 if selected else False
+    filter_label = f" from sectors: {', '.join(sectors)}" if use_sector_filter else ""
+    print(f"\nRandomly selected {size} stocks{filter_label}:")
     for i, stock in enumerate(selected, 1):
-        label = f"{stock[0]} ({stock[1]})" if has_sector else stock[0]
+        label = f"{stock[0]} ({stock[1]})" if has_sector_col else stock[0]
         print(f"  {i}. {label}")
 
     return symbols
@@ -621,9 +686,11 @@ if __name__ == "__main__":
 
     # Use configured portfolio or select random
     if config.AUTO_SELECT_PORTFOLIO:
+        sectors = getattr(config, 'PORTFOLIO_SECTORS', [])
         symbols = select_random_portfolio(
             size=config.PORTFOLIO_SIZE,
-            seed=config.RANDOM_SEED
+            seed=config.RANDOM_SEED,
+            sectors=sectors if sectors else None
         )
     else:
         symbols = config.PORTFOLIO_STOCKS[:config.PORTFOLIO_SIZE]

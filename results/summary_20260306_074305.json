@@ -1,0 +1,186 @@
+{
+  "run_id": "20260306_074305",
+  "mode": "portfolio",
+  "symbol": null,
+  "portfolio_symbols": [
+    "DOV",
+    "ALK",
+    "ACM",
+    "ESP",
+    "BBSI",
+    "AYI",
+    "AVAV",
+    "AMSC",
+    "ALGT",
+    "EFX",
+    "CVU",
+    "AL",
+    "DCI",
+    "CMI",
+    "ACTG",
+    "ATRO",
+    "AWI",
+    "CSL",
+    "DE",
+    "CWST"
+  ],
+  "portfolio_size": 20,
+  "initial_allocation_pct": 80.0,
+  "start_date": "2012-01-01",
+  "end_date": "2020-12-31",
+  "population_size": 30,
+  "num_generations": 30,
+  "config": {
+    "ga_parameters": {
+      "population_size": 30,
+      "num_generations": 30,
+      "mutation_rate": 0.4,
+      "crossover_rate": 0.9,
+      "elitism_count": 6,
+      "tournament_size": 4,
+      "random_seed": 42
+    },
+    "portfolio": {
+      "use_portfolio": true,
+      "portfolio_size": 20,
+      "auto_select_portfolio": true,
+      "portfolio_sectors": [
+        "Industrials"
+      ],
+      "portfolio_stocks": [
+        "DOV",
+        "ALK",
+        "ACM",
+        "ESP",
+        "BBSI",
+        "AYI",
+        "AVAV",
+        "AMSC",
+        "ALGT",
+        "EFX",
+        "CVU",
+        "AL",
+        "DCI",
+        "CMI",
+        "ACTG",
+        "ATRO",
+        "AWI",
+        "CSL",
+        "DE",
+        "CWST"
+      ]
+    },
+    "dates": {
+      "train_start_date": "2012-01-01",
+      "train_end_date": "2020-12-31",
+      "test_start_date": "2021-01-01",
+      "test_end_date": "2023-12-31"
+    },
+    "kfold": {
+      "use_kfold_validation": false,
+      "kfold_num_folds": 2,
+      "kfold_fold_years": 3,
+      "kfold_allow_overlap": false,
+      "kfold_weight_recent": false,
+      "kfold_recent_weight_factor": 1.5,
+      "kfold_min_bars_per_fold": 200
+    },
+    "features": {
+      "use_macro_data": true,
+      "use_technical_indicators": true,
+      "use_ensemble_signals": true
+    },
+    "backtrader": {
+      "initial_cash": 100000.0,
+      "commission": 0.001,
+      "initial_allocation_pct": 80.0
+    },
+    "fitness": {
+      "fitness_weights": {
+        "total_return": 0.4,
+        "sharpe_ratio": 0.24,
+        "max_drawdown": 0.24,
+        "win_rate": 0.12
+      },
+      "min_trades_required": 5
+    },
+    "execution": {
+      "use_parallel_evaluation": true,
+      "max_parallel_workers": null,
+      "database_path": "/Users/fred/alpaca_Big_polygon.db"
+    }
+  },
+  "best_trader": {
+    "generation": 29,
+    "fitness": 71.70199818680409,
+    "genes": {
+      "ma_short_period": 12,
+      "ma_long_period": 34,
+      "ma_type": 0,
+      "stop_loss_pct": 9.962633555201538,
+      "take_profit_pct": 6.650286539341329,
+      "position_size_pct": 22.470232333371804,
+      "macro_enabled": 0,
+      "macro_weight": 0.722885954368623,
+      "macro_vix_threshold": 25.533245609794786,
+      "macro_vix_position_scale": 0.6405144703041206,
+      "macro_yc_threshold": -0.4612934991524522,
+      "macro_yc_action": 1,
+      "macro_rate_threshold": 2.8627040667510464,
+      "macro_rate_position_scale": 0.7705026536359807,
+      "macro_cpi_threshold": 6.816244194348427,
+      "macro_cpi_position_scale": 0.787375815292781,
+      "macro_unemp_threshold": 9.945295530885138,
+      "macro_unemp_action": 1,
+      "macro_risk_stop_adj": 0.8284172939657879,
+      "macro_risk_tp_adj": 0.8114490394750762,
+      "macro_regime_count_req": 1,
+      "ti_enabled": 0,
+      "ti_weight": 0.4543692000913474,
+      "ti_rsi_overbought": 73,
+      "ti_rsi_oversold": 33,
+      "ti_adx_threshold": 34,
+      "ti_adx_position_scale": 0.270045651331649,
+      "ti_natr_threshold": 7.864705006889774,
+      "ti_natr_risk_action": 0,
+      "ti_mfi_overbought": 81,
+      "ti_mfi_oversold": 26,
+      "ti_macdhist_confirm": 0,
+      "ti_macdhist_exit_confirm": 0,
+      "ensemble_enabled": 0,
+      "sig_ma_weight": 0.7640342577868575,
+      "sig_bb_weight": 0.10234996223502368,
+      "sig_stoch_weight": 0.8050493188372386,
+      "sig_macd_weight": 0.1443989099605575,
+      "sig_rsi_weight": 0.16055733602596878,
+      "sig_buy_threshold": 0.15487025652088868,
+      "sig_sell_threshold": -0.46681214068036403,
+      "sig_bb_period_idx": 2,
+      "sig_stoch_ob": 72,
+      "sig_stoch_os": 24,
+      "sig_rsi_ob": 76,
+      "sig_rsi_os": 23
+    },
+    "performance": {
+      "total_return": 169.3786270299998,
+      "sharpe_ratio": 0.8902338622941055,
+      "max_drawdown": -19.16586249229141,
+      "trade_count": 754,
+      "win_rate": 53.44827586206896
+    }
+  },
+  "benchmark": {
+    "buy_and_hold_return": 115.60739625659906,
+    "allocation_pct": 80.0,
+    "strategy_outperformance": 53.77123077340073,
+    "beats_benchmark": true
+  },
+  "kfold": {
+    "enabled": false,
+    "num_folds": 1,
+    "fold_years": 3,
+    "allow_overlap": false,
+    "weight_recent": false,
+    "fold_results": null
+  }
+}

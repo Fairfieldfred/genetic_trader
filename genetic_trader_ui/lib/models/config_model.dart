@@ -9,6 +9,7 @@ class GeneticConfig {
   int portfolioSize;
   List<String> portfolioStocks;
   bool autoSelectPortfolio;
+  List<String> portfolioSectors;
   double initialAllocationPct;
 
   // Date range
@@ -54,6 +55,10 @@ class GeneticConfig {
   // Ensemble signals
   bool useEnsembleSignals;
 
+  // Out-of-sample testing
+  bool useOutOfSampleTest;
+  int trainingYears;
+
   // K-Fold cross-validation
   bool useKfoldValidation;
   int kfoldNumFolds;
@@ -64,17 +69,19 @@ class GeneticConfig {
   int kfoldMinBarsPerFold;
 
   GeneticConfig({
-    this.databasePath = '/Users/fred/alpaca_Big_polygon.db',
+    this.databasePath =
+        '/Users/fred/Development/Genetic Trader/SPY_Data.db',
     this.testSymbol = 'AAPL',
     this.usePortfolio = true,
     this.portfolioSize = 20,
     this.portfolioStocks = const [],
     this.autoSelectPortfolio = true,  // Auto-select random stocks by default
+    this.portfolioSectors = const [],
     this.initialAllocationPct = 80.0,
-    this.trainStartDate = '2012-01-01',
-    this.trainEndDate = '2020-12-31',
-    this.testStartDate = '2021-01-01',
-    this.testEndDate = '2023-12-31',
+    this.trainStartDate = '2016-03-09',
+    this.trainEndDate = '2024-03-09',
+    this.testStartDate = '2024-03-10',
+    this.testEndDate = '2026-03-06',
     this.populationSize = 30,
     this.numGenerations = 40,
     this.mutationRate = 0.2,
@@ -97,6 +104,8 @@ class GeneticConfig {
     this.useMacroData = false,
     this.useTechnicalIndicators = false,
     this.useEnsembleSignals = false,
+    this.useOutOfSampleTest = true,
+    this.trainingYears = 8,
     this.useKfoldValidation = false,
     this.kfoldNumFolds = 2,
     this.kfoldFoldYears = 3,
@@ -115,6 +124,9 @@ class GeneticConfig {
       portfolioSize: json['PORTFOLIO_SIZE'] ?? 20,
       portfolioStocks: List<String>.from(json['PORTFOLIO_STOCKS'] ?? []),
       autoSelectPortfolio: json['AUTO_SELECT_PORTFOLIO'] ?? true,
+      portfolioSectors: List<String>.from(
+        json['PORTFOLIO_SECTORS'] ?? [],
+      ),
       initialAllocationPct: (json['INITIAL_ALLOCATION_PCT'] ?? 80.0).toDouble(),
       trainStartDate: json['TRAIN_START_DATE'] ?? '2012-01-01',
       trainEndDate: json['TRAIN_END_DATE'] ?? '2020-12-31',
@@ -136,6 +148,8 @@ class GeneticConfig {
       useMacroData: json['USE_MACRO_DATA'] ?? false,
       useTechnicalIndicators: json['USE_TECHNICAL_INDICATORS'] ?? false,
       useEnsembleSignals: json['USE_ENSEMBLE_SIGNALS'] ?? false,
+      useOutOfSampleTest: json['USE_OUT_OF_SAMPLE_TEST'] ?? true,
+      trainingYears: json['TRAINING_YEARS'] ?? 8,
       useKfoldValidation: json['USE_KFOLD_VALIDATION'] ?? false,
       kfoldNumFolds: json['KFOLD_NUM_FOLDS'] ?? 2,
       kfoldFoldYears: json['KFOLD_FOLD_YEARS'] ?? 3,
@@ -156,6 +170,7 @@ class GeneticConfig {
       'PORTFOLIO_SIZE': portfolioSize,
       'PORTFOLIO_STOCKS': portfolioStocks,
       'AUTO_SELECT_PORTFOLIO': autoSelectPortfolio,
+      'PORTFOLIO_SECTORS': portfolioSectors,
       'INITIAL_ALLOCATION_PCT': initialAllocationPct,
       'TRAIN_START_DATE': trainStartDate,
       'TRAIN_END_DATE': trainEndDate,
@@ -177,6 +192,8 @@ class GeneticConfig {
       'USE_MACRO_DATA': useMacroData,
       'USE_TECHNICAL_INDICATORS': useTechnicalIndicators,
       'USE_ENSEMBLE_SIGNALS': useEnsembleSignals,
+      'USE_OUT_OF_SAMPLE_TEST': useOutOfSampleTest,
+      'TRAINING_YEARS': trainingYears,
       'USE_KFOLD_VALIDATION': useKfoldValidation,
       'KFOLD_NUM_FOLDS': kfoldNumFolds,
       'KFOLD_FOLD_YEARS': kfoldFoldYears,
@@ -221,13 +238,45 @@ class GeneticConfig {
     }
     buffer.writeln(']');
     buffer.writeln('AUTO_SELECT_PORTFOLIO = ${_toPythonBool(autoSelectPortfolio)}');
+    buffer.writeln('PORTFOLIO_SECTORS = [');
+    for (var sector in portfolioSectors) {
+      buffer.writeln('    "$sector",');
+    }
+    buffer.writeln(']');
     buffer.writeln();
+
+    // Compute train/test split from trainingYears
+    final dataStart = DateTime.tryParse(trainStartDate);
+    final dataEnd = DateTime.tryParse(testEndDate);
+    String computedTrainEnd = trainEndDate;
+    String computedTestStart = testStartDate;
+    if (dataStart != null && dataEnd != null && useOutOfSampleTest) {
+      final splitDate = DateTime(
+        dataStart.year + trainingYears,
+        dataStart.month,
+        dataStart.day,
+      );
+      computedTrainEnd =
+          '${splitDate.year}-${splitDate.month.toString().padLeft(2, '0')}'
+          '-${splitDate.day.toString().padLeft(2, '0')}';
+      final testDate = splitDate.add(const Duration(days: 1));
+      computedTestStart =
+          '${testDate.year}-${testDate.month.toString().padLeft(2, '0')}'
+          '-${testDate.day.toString().padLeft(2, '0')}';
+    } else if (!useOutOfSampleTest && dataEnd != null) {
+      // Use full date range for training when OOS is disabled
+      computedTrainEnd = testEndDate;
+      computedTestStart = testEndDate;
+    }
 
     buffer.writeln('# Data split configuration');
     buffer.writeln('TRAIN_START_DATE = "$trainStartDate"');
-    buffer.writeln('TRAIN_END_DATE = "$trainEndDate"');
-    buffer.writeln('TEST_START_DATE = "$testStartDate"');
+    buffer.writeln('TRAIN_END_DATE = "$computedTrainEnd"');
+    buffer.writeln('TEST_START_DATE = "$computedTestStart"');
     buffer.writeln('TEST_END_DATE = "$testEndDate"');
+    buffer.writeln(
+        'USE_OUT_OF_SAMPLE_TEST = ${_toPythonBool(useOutOfSampleTest)}');
+    buffer.writeln('TRAINING_YEARS = $trainingYears');
     buffer.writeln();
 
     buffer.writeln('# K-Fold Temporal Cross-Validation');
@@ -502,6 +551,7 @@ class GeneticConfig {
     int? portfolioSize,
     List<String>? portfolioStocks,
     bool? autoSelectPortfolio,
+    List<String>? portfolioSectors,
     double? initialAllocationPct,
     String? trainStartDate,
     String? trainEndDate,
@@ -523,6 +573,8 @@ class GeneticConfig {
     bool? useMacroData,
     bool? useTechnicalIndicators,
     bool? useEnsembleSignals,
+    bool? useOutOfSampleTest,
+    int? trainingYears,
     bool? useKfoldValidation,
     int? kfoldNumFolds,
     int? kfoldFoldYears,
@@ -538,6 +590,7 @@ class GeneticConfig {
       portfolioSize: portfolioSize ?? this.portfolioSize,
       portfolioStocks: portfolioStocks ?? this.portfolioStocks,
       autoSelectPortfolio: autoSelectPortfolio ?? this.autoSelectPortfolio,
+      portfolioSectors: portfolioSectors ?? this.portfolioSectors,
       initialAllocationPct: initialAllocationPct ?? this.initialAllocationPct,
       trainStartDate: trainStartDate ?? this.trainStartDate,
       trainEndDate: trainEndDate ?? this.trainEndDate,
@@ -562,6 +615,9 @@ class GeneticConfig {
           useTechnicalIndicators ?? this.useTechnicalIndicators,
       useEnsembleSignals:
           useEnsembleSignals ?? this.useEnsembleSignals,
+      useOutOfSampleTest:
+          useOutOfSampleTest ?? this.useOutOfSampleTest,
+      trainingYears: trainingYears ?? this.trainingYears,
       useKfoldValidation:
           useKfoldValidation ?? this.useKfoldValidation,
       kfoldNumFolds: kfoldNumFolds ?? this.kfoldNumFolds,

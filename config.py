@@ -4,27 +4,31 @@ Auto-generated from Flutter UI.
 """
 
 # Database configuration
-DATABASE_PATH = "/Users/fred/alpaca_Big_polygon.db"
+DATABASE_PATH = "/Users/fred/Development/Genetic Trader/SPY_Data.db"
 TEST_SYMBOL = "AAPL"
 
 # Multi-stock portfolio configuration
 USE_PORTFOLIO = True
-PORTFOLIO_SIZE = 1
+PORTFOLIO_SIZE = 50
 PORTFOLIO_STOCKS = [
-    "GOOG",
 ]
-AUTO_SELECT_PORTFOLIO = False
+AUTO_SELECT_PORTFOLIO = True
+PORTFOLIO_SECTORS = [
+    "Industrials",
+]
 
 # Data split configuration
-TRAIN_START_DATE = "2012-01-01"
-TRAIN_END_DATE = "2020-12-31"
-TEST_START_DATE = "2021-01-01"
-TEST_END_DATE = "2023-12-31"
+TRAIN_START_DATE = "2016-03-09"
+TRAIN_END_DATE = "2024-03-09"
+TEST_START_DATE = "2024-03-10"
+TEST_END_DATE = "2026-03-06"
+USE_OUT_OF_SAMPLE_TEST = True
+TRAINING_YEARS = 8
 
 # K-Fold Temporal Cross-Validation
 USE_KFOLD_VALIDATION = True
-KFOLD_NUM_FOLDS = 5
-KFOLD_FOLD_YEARS = 3
+KFOLD_NUM_FOLDS = 4
+KFOLD_FOLD_YEARS = 2
 KFOLD_ALLOW_OVERLAP = True
 KFOLD_WEIGHT_RECENT = False
 KFOLD_RECENT_WEIGHT_FACTOR = 1.5
@@ -32,10 +36,10 @@ KFOLD_MIN_BARS_PER_FOLD = 200
 
 # Genetic algorithm configuration
 POPULATION_SIZE = 100
-NUM_GENERATIONS = 200
-MUTATION_RATE = 0.3
+NUM_GENERATIONS = 50
+MUTATION_RATE = 0.4
 CROSSOVER_RATE = 0.9
-ELITISM_COUNT = 30  # 30.0% of population
+ELITISM_COUNT = 10  # 10.0% of population
 
 # Tournament selection
 TOURNAMENT_SIZE = 4
