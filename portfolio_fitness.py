@@ -35,9 +35,16 @@ class PortfolioFitnessEvaluator:
         self.initial_cash = config.INITIAL_CASH
         self.commission = config.COMMISSION
 
-        # Load data for all symbols (cached in memory for reuse)
-        print(f"\nLoading portfolio data for {len(symbols)} stocks...")
-        loader = DataLoader(config.DATABASE_PATH)
+        # Select data source based on config
+        data_source = getattr(config, 'DATA_SOURCE', 'sqlite')
+        if data_source == 'yahoo':
+            from yahoo_data_loader import YahooDataLoader
+            loader = YahooDataLoader()
+            print(f"\nLoading portfolio data from Yahoo Finance for {len(symbols)} stocks...")
+        else:
+            loader = DataLoader(config.DATABASE_PATH)
+            print(f"\nLoading portfolio data from SQLite for {len(symbols)} stocks...")
+
         self.data_feeds = {}
 
         # Cache data in memory to avoid repeated disk I/O
@@ -48,15 +55,13 @@ class PortfolioFitnessEvaluator:
                     start_date=start_date,
                     end_date=end_date
                 )
-                # Store as read-only to prevent accidental modification
-                df.flags.writeable = False
                 self.data_feeds[symbol] = df
-                print(f"  ✓ {symbol}: {len(df)} bars")
+                print(f"  + {symbol}: {len(df)} bars")
             except Exception as e:
-                print(f"  ✗ {symbol}: Failed to load - {e}")
+                print(f"  - {symbol}: Failed to load - {e}")
 
         self.valid_symbols = list(self.data_feeds.keys())
-        print(f"\nSuccessfully loaded {len(self.valid_symbols)}/{len(symbols)} stocks")
+        print(f"\nLoaded {len(self.valid_symbols)}/{len(symbols)} stocks")
 
         if len(self.valid_symbols) == 0:
             raise ValueError("No valid stock data loaded!")
@@ -71,11 +76,17 @@ class PortfolioFitnessEvaluator:
                 )
                 if macro_df is not None and not macro_df.empty:
                     self.macro_df = macro_df
+                    available = [c for c in macro_df.columns if macro_df[c].notna().any()]
+                    missing = [c for c in macro_df.columns if macro_df[c].isna().all()]
                     print(f"\n  Macro data loaded: {len(macro_df)} rows")
+                    if available:
+                        print(f"    Available: {', '.join(available)}")
+                    if missing:
+                        print(f"    Missing (neutral defaults): {', '.join(missing)}")
                 else:
-                    print("\n  Warning: Macro data table empty or missing")
+                    print("\n  Macro data: not available — macro genes will use neutral defaults")
             except Exception as e:
-                print(f"\n  Warning: Could not load macro data: {e}")
+                print(f"\n  Macro data: not available ({e}) — macro genes will use neutral defaults")
 
         # Pre-compute fold boundaries
         self.folds = self._compute_folds()

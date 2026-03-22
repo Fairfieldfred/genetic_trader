@@ -9,6 +9,22 @@ wheels/
 # Virtual environments
 .venv
 
+# API keys
+.env
+
 # Large database files
 spy.db
 spy_corrupted.db
+
+# Run outputs
+checkpoints/
+results/
+logs/
+
+# Cache
+.yahoo_cache/
+.DS_Store
+.claude/.DS_Store
+
+# Worktrees
+.claude/worktrees/

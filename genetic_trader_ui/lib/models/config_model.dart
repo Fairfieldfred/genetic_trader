@@ -39,6 +39,10 @@ class GeneticConfig {
   // Minimum trades
   int minTradesRequired;
 
+  // Backtesting configuration
+  String backtestingEngine;
+  String dataSource;
+
   // Performance settings
   bool useParallelEvaluation;
   int? maxParallelWorkers;
@@ -98,6 +102,8 @@ class GeneticConfig {
       'win_rate': 0.12,
     },
     this.minTradesRequired = 5,
+    this.backtestingEngine = 'backtrader',
+    this.dataSource = 'sqlite',
     this.useParallelEvaluation = true,
     this.maxParallelWorkers,
     this.randomSeed = 42,
@@ -142,6 +148,8 @@ class GeneticConfig {
       commission: (json['COMMISSION'] ?? 0.001).toDouble(),
       fitnessWeights: Map<String, double>.from(json['FITNESS_WEIGHTS'] ?? {}),
       minTradesRequired: json['MIN_TRADES_REQUIRED'] ?? 5,
+      backtestingEngine: json['BACKTESTING_ENGINE'] ?? 'backtrader',
+      dataSource: json['DATA_SOURCE'] ?? 'sqlite',
       useParallelEvaluation: json['USE_PARALLEL_EVALUATION'] ?? true,
       maxParallelWorkers: json['MAX_PARALLEL_WORKERS'],
       randomSeed: json['RANDOM_SEED'],
@@ -186,6 +194,8 @@ class GeneticConfig {
       'COMMISSION': commission,
       'FITNESS_WEIGHTS': fitnessWeights,
       'MIN_TRADES_REQUIRED': minTradesRequired,
+      'BACKTESTING_ENGINE': backtestingEngine,
+      'DATA_SOURCE': dataSource,
       'USE_PARALLEL_EVALUATION': useParallelEvaluation,
       'MAX_PARALLEL_WORKERS': maxParallelWorkers,
       'RANDOM_SEED': randomSeed,
@@ -496,7 +506,9 @@ class GeneticConfig {
         'USE_ENSEMBLE_SIGNALS = ${_toPythonBool(useEnsembleSignals)}');
     buffer.writeln();
 
-    buffer.writeln('# Backtrader configuration');
+    buffer.writeln('# Backtesting configuration');
+    buffer.writeln("BACKTESTING_ENGINE = '$backtestingEngine'");
+    buffer.writeln("DATA_SOURCE = '$dataSource'");
     buffer.writeln('INITIAL_CASH = $initialCash');
     buffer.writeln('COMMISSION = $commission  # 0.1% commission per trade');
     buffer.writeln();
@@ -567,6 +579,8 @@ class GeneticConfig {
     double? commission,
     Map<String, double>? fitnessWeights,
     int? minTradesRequired,
+    String? backtestingEngine,
+    String? dataSource,
     bool? useParallelEvaluation,
     int? maxParallelWorkers,
     int? randomSeed,
@@ -606,6 +620,8 @@ class GeneticConfig {
       commission: commission ?? this.commission,
       fitnessWeights: fitnessWeights ?? this.fitnessWeights,
       minTradesRequired: minTradesRequired ?? this.minTradesRequired,
+      backtestingEngine: backtestingEngine ?? this.backtestingEngine,
+      dataSource: dataSource ?? this.dataSource,
       useParallelEvaluation:
           useParallelEvaluation ?? this.useParallelEvaluation,
       maxParallelWorkers: maxParallelWorkers ?? this.maxParallelWorkers,

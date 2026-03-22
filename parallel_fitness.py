@@ -108,8 +108,12 @@ class _WorkerFunction:
             eval_config['mode'] = 'single'
             eval_config['data'] = evaluator.data
         elif hasattr(evaluator, 'data_feeds'):
-            # Portfolio evaluator
-            eval_config['mode'] = 'portfolio'
+            # Portfolio evaluator (Backtrader or Tradix)
+            from tradix_fitness import TradixPortfolioFitnessEvaluator
+            if isinstance(evaluator, TradixPortfolioFitnessEvaluator):
+                eval_config['mode'] = 'tradix_portfolio'
+            else:
+                eval_config['mode'] = 'portfolio'
             eval_config['symbols'] = evaluator.valid_symbols
             eval_config['data_feeds'] = evaluator.data_feeds
             eval_config['start_date'] = evaluator.start_date
@@ -127,8 +131,23 @@ class _WorkerFunction:
         # Recreate evaluator in worker process
         if self.evaluator_config['mode'] == 'single':
             raise ValueError("Single stock mode is not supported. Use portfolio mode with size=1.")
+        elif self.evaluator_config['mode'] == 'tradix_portfolio':
+            # Tradix portfolio mode
+            from tradix_fitness import TradixPortfolioFitnessEvaluator
+            evaluator = TradixPortfolioFitnessEvaluator.__new__(
+                TradixPortfolioFitnessEvaluator
+            )
+            evaluator.data_feeds = self.evaluator_config['data_feeds']
+            evaluator.valid_symbols = self.evaluator_config['symbols']
+            evaluator.symbols = self.evaluator_config['symbols']
+            evaluator.start_date = self.evaluator_config['start_date']
+            evaluator.end_date = self.evaluator_config['end_date']
+            evaluator.initial_cash = config.INITIAL_CASH
+            evaluator.commission = config.COMMISSION
+            evaluator.macro_df = self.evaluator_config.get('macro_df')
+            evaluator.folds = self.evaluator_config.get('folds') or evaluator._compute_folds()
         else:
-            # Portfolio mode - use cached data
+            # Backtrader portfolio mode - use cached data
             from portfolio_fitness import PortfolioFitnessEvaluator
             evaluator = PortfolioFitnessEvaluator.__new__(
                 PortfolioFitnessEvaluator

@@ -105,12 +105,28 @@ class GeneticAlgorithm:
             print(f"\nPortfolio size: {len(self.portfolio_symbols)} stocks")
             print(f"Symbols: {', '.join(self.portfolio_symbols)}")
 
-            # Initialize portfolio evaluator
-            self.evaluator = PortfolioFitnessEvaluator(
-                symbols=self.portfolio_symbols,
-                start_date=self.start_date,
-                end_date=self.end_date
-            )
+            # Initialize portfolio evaluator (engine selected by config)
+            engine = getattr(config, 'BACKTESTING_ENGINE', 'backtrader')
+            if engine == 'vectorbt':
+                from vectorbt_fitness import VectorbtFitnessEvaluator
+                self.evaluator = VectorbtFitnessEvaluator(
+                    symbols=self.portfolio_symbols,
+                    start_date=self.start_date,
+                    end_date=self.end_date,
+                )
+            elif engine == 'tradix':
+                from tradix_fitness import TradixPortfolioFitnessEvaluator
+                self.evaluator = TradixPortfolioFitnessEvaluator(
+                    symbols=self.portfolio_symbols,
+                    start_date=self.start_date,
+                    end_date=self.end_date
+                )
+            else:
+                self.evaluator = PortfolioFitnessEvaluator(
+                    symbols=self.portfolio_symbols,
+                    start_date=self.start_date,
+                    end_date=self.end_date
+                )
             self.data = None  # Not used in portfolio mode
 
         else:
@@ -122,7 +138,10 @@ class GeneticAlgorithm:
             )
 
         # Wrap evaluator with parallel processing if enabled
-        if config.USE_PARALLEL_EVALUATION:
+        # (vectorbt handles batching internally — skip parallel wrapper)
+        if engine == 'vectorbt':
+            print(f"\n⚡ vectorbt batch evaluation (parallel wrapper skipped)")
+        elif config.USE_PARALLEL_EVALUATION:
             print(f"\n⚡ Parallel evaluation enabled")
             self.evaluator = enable_parallel_evaluation(
                 self.evaluator,

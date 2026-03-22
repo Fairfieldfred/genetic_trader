@@ -586,6 +586,86 @@ class ConfigScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
+              // Backtesting Settings
+              _buildSection(
+                context,
+                title: 'Backtesting Engine',
+                icon: Icons.settings_applications,
+                children: [
+                  ListTile(
+                    title: const Text('Engine'),
+                    subtitle: const Text(
+                      'Select the backtesting framework',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'backtrader',
+                            label: Text('Backtrader'),
+                            icon: Icon(Icons.candlestick_chart),
+                          ),
+                          ButtonSegment(
+                            value: 'tradix',
+                            label: Text('Tradix'),
+                            icon: Icon(Icons.speed),
+                          ),
+                        ],
+                        selected: {config.backtestingEngine},
+                        onSelectionChanged: (selected) {
+                          viewModel.updateBacktestingEngine(
+                            selected.first,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    title: const Text('Data Source'),
+                    subtitle: const Text(
+                      'Where to load market data from',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(
+                            value: 'sqlite',
+                            label: Text('SQLite'),
+                            icon: Icon(Icons.storage),
+                          ),
+                          ButtonSegment(
+                            value: 'yahoo',
+                            label: Text('Yahoo Finance'),
+                            icon: Icon(Icons.cloud_download),
+                          ),
+                        ],
+                        selected: {config.dataSource},
+                        onSelectionChanged: (selected) {
+                          viewModel.updateDataSource(
+                            selected.first,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+              const SizedBox(height: 16),
+
               // Backtrader Settings
               _buildSection(
                 context,

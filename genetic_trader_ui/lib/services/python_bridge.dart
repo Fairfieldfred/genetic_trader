@@ -45,11 +45,26 @@ class PythonBridge {
         print('Checking Python availability...');
       }
 
+      // Prefer venv Python (has all dependencies), fall back to system python3
+      final venvPython = '$workingDir/.venv/bin/python3';
+      final venvFile = File(venvPython);
+      final pythonExe =
+          await venvFile.exists() ? venvPython : 'python3';
+
+      if (kDebugMode) {
+        print('Using Python: $pythonExe');
+      }
+
       // Check if Python is available
       try {
-        final pythonCheck = await Process.run('which', ['python3']);
+        final pythonCheck = await Process.run(
+          pythonExe,
+          ['--version'],
+        );
         if (kDebugMode) {
-          print('Python3 path: ${pythonCheck.stdout}');
+          print(
+            'Python version: ${pythonCheck.stdout.toString().trim()}',
+          );
         }
       } catch (e) {
         onError('Python3 not found. Please install Python 3.');
@@ -68,7 +83,7 @@ class PythonBridge {
       }
 
       _process = await Process.start(
-        'python3',
+        pythonExe,
         args,
         workingDirectory: workingDir,
       );

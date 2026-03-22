@@ -104,6 +104,17 @@ class ConfigViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Backtesting Engine & Data Source
+  void updateBacktestingEngine(String engine) {
+    _config = _config.copyWith(backtestingEngine: engine);
+    notifyListeners();
+  }
+
+  void updateDataSource(String source) {
+    _config = _config.copyWith(dataSource: source);
+    notifyListeners();
+  }
+
   // Backtrader Settings
   void updateInitialCash(double cash) {
     _config = _config.copyWith(initialCash: cash);
