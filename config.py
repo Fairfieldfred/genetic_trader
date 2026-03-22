@@ -9,12 +9,12 @@ TEST_SYMBOL = "AAPL"
 
 # Multi-stock portfolio configuration
 USE_PORTFOLIO = True
-PORTFOLIO_SIZE = 50
+PORTFOLIO_SIZE = 30
 PORTFOLIO_STOCKS = [
 ]
 AUTO_SELECT_PORTFOLIO = True
 PORTFOLIO_SECTORS = [
-    "Industrials",
+    "Information Technology",
 ]
 
 # Data split configuration
@@ -26,20 +26,20 @@ USE_OUT_OF_SAMPLE_TEST = True
 TRAINING_YEARS = 8
 
 # K-Fold Temporal Cross-Validation
-USE_KFOLD_VALIDATION = True
-KFOLD_NUM_FOLDS = 4
-KFOLD_FOLD_YEARS = 2
-KFOLD_ALLOW_OVERLAP = True
+USE_KFOLD_VALIDATION = False
+KFOLD_NUM_FOLDS = 2
+KFOLD_FOLD_YEARS = 3
+KFOLD_ALLOW_OVERLAP = False
 KFOLD_WEIGHT_RECENT = False
 KFOLD_RECENT_WEIGHT_FACTOR = 1.5
 KFOLD_MIN_BARS_PER_FOLD = 200
 
 # Genetic algorithm configuration
-POPULATION_SIZE = 100
-NUM_GENERATIONS = 50
-MUTATION_RATE = 0.4
+POPULATION_SIZE = 30
+NUM_GENERATIONS = 40
+MUTATION_RATE = 0.2
 CROSSOVER_RATE = 0.9
-ELITISM_COUNT = 10  # 10.0% of population
+ELITISM_COUNT = 4  # 12.0% of population
 
 # Tournament selection
 TOURNAMENT_SIZE = 4
@@ -164,7 +164,9 @@ USE_TECHNICAL_INDICATORS = True
 # Ensemble signal configuration
 USE_ENSEMBLE_SIGNALS = True
 
-# Backtrader configuration
+# Backtesting configuration
+BACKTESTING_ENGINE = 'vectorbt'
+DATA_SOURCE = 'yahoo'
 INITIAL_CASH = 100000.0
 COMMISSION = 0.001  # 0.1% commission per trade
 
@@ -199,5 +201,8 @@ CHECKPOINT_DIR = "checkpoints"
 RANDOM_SEED = 42
 
 # Performance optimization
+# Note: USE_PARALLEL_EVALUATION is ignored when BACKTESTING_ENGINE='vectorbt'
+# (population-level batching is handled internally by VectorbtFitnessEvaluator)
+VECTORBT_DEDUP = True  # Deduplicate identical chromosomes in vectorbt batch evaluation
 USE_PARALLEL_EVALUATION = True  # Use multiprocessing for fitness evaluation
 MAX_PARALLEL_WORKERS = None     # None = use all CPU cores, or specify number
