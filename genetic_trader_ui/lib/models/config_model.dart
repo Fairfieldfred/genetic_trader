@@ -74,7 +74,7 @@ class GeneticConfig {
 
   GeneticConfig({
     this.databasePath =
-        '/Users/fred/Development/Genetic Trader/SPY_Data.db',
+        '/Users/macmini/Dev/Genetic Trader/SPY_Data.db',
     this.testSymbol = 'AAPL',
     this.usePortfolio = true,
     this.portfolioSize = 20,

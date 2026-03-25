@@ -612,6 +612,11 @@ class ConfigScreen extends StatelessWidget {
                             icon: Icon(Icons.candlestick_chart),
                           ),
                           ButtonSegment(
+                            value: 'vectorbt',
+                            label: Text('VectorBT'),
+                            icon: Icon(Icons.bolt),
+                          ),
+                          ButtonSegment(
                             value: 'tradix',
                             label: Text('Tradix'),
                             icon: Icon(Icons.speed),
@@ -977,7 +982,7 @@ class _DatabaseSelector extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   static const _projectDir =
-      '/Users/fred/Development/Genetic Trader';
+      '/Users/macmini/Dev/Genetic Trader';
 
   static const _presets = [
     _DbPreset(
@@ -987,7 +992,7 @@ class _DatabaseSelector extends StatelessWidget {
     ),
     _DbPreset(
       label: 'Alpaca/Polygon',
-      path: '/Users/fred/alpaca_Big_polygon.db',
+      path: '/Users/macmini/alpaca_Big_polygon.db',
       description: '4656 symbols, 10 years, with TI',
     ),
   ];

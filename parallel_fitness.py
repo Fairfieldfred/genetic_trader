@@ -109,8 +109,12 @@ class _WorkerFunction:
             eval_config['data'] = evaluator.data
         elif hasattr(evaluator, 'data_feeds'):
             # Portfolio evaluator (Backtrader or Tradix)
-            from tradix_fitness import TradixPortfolioFitnessEvaluator
-            if isinstance(evaluator, TradixPortfolioFitnessEvaluator):
+            try:
+                from tradix_fitness import TradixPortfolioFitnessEvaluator
+                is_tradix = isinstance(evaluator, TradixPortfolioFitnessEvaluator)
+            except ImportError:
+                is_tradix = False
+            if is_tradix:
                 eval_config['mode'] = 'tradix_portfolio'
             else:
                 eval_config['mode'] = 'portfolio'

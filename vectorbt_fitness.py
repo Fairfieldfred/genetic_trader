@@ -107,6 +107,40 @@ class VectorbtFitnessEvaluator:
 
         print(f"  Close matrix: {self._close.shape[0]} dates x {self._close.shape[1]} symbols")
 
+        # --- Pre-compute all MA windows (one-time cost ~300ms) ---
+        import time as _time
+        _t0 = _time.time()
+        all_windows = sorted(set(range(5, 101)))
+        self._sma_cache = vbt.MA.run(self._close, window=all_windows, ewm=False)
+        self._ema_cache = vbt.MA.run(self._close, window=all_windows, ewm=True)
+        print(f"  Pre-computed {len(all_windows)} SMA+EMA windows: "
+              f"{(_time.time()-_t0)*1000:.0f}ms")
+
+        # --- Pre-align per-stock indicator data to the close index ---
+        # Avoids repeated DataFrame.reindex() in ensemble/TI per trader
+        _t0 = _time.time()
+        self._aligned_indicators = {}
+        indicator_cols = [
+            'rsi', 'rsi_14', 'adx', 'adx_14', 'natr', 'atr_14',
+            'mfi', 'mfi_14', 'macd', 'macd_signal', 'macdhist',
+            'bb_upper', 'bb_lower', 'bb_middle',
+            'bb_upper_20', 'bb_lower_20', 'bb_middle_20',
+            'bb_top', 'bb_bot', 'bb_mid',
+            'slowk', 'slowd', 'stoch_k', 'stoch_d',
+            'signal',
+        ]
+        dates = self._close.index
+        for symbol in self.valid_symbols:
+            df = self.data_feeds[symbol]
+            aligned = {}
+            df_reindexed = df.reindex(dates, method='ffill')
+            for col in indicator_cols:
+                if col in df_reindexed.columns:
+                    aligned[col] = df_reindexed[col].values
+            self._aligned_indicators[symbol] = aligned
+        print(f"  Pre-aligned indicator data for {len(self.valid_symbols)} symbols: "
+              f"{(_time.time()-_t0)*1000:.0f}ms")
+
     def _compute_folds(self) -> List[Tuple[str, str]]:
         """
         Compute fold date boundaries from config.
@@ -311,33 +345,41 @@ class VectorbtFitnessEvaluator:
         weight = float(genes.get("ti_weight", 0.5))
 
         for symbol in symbols:
-            df = self.data_feeds.get(symbol)
-            if df is None:
+            cached = self._aligned_indicators.get(symbol, {})
+            if not cached:
                 continue
-            df_slice = df.reindex(dates, method="ffill")
+
+            # Use pre-aligned numpy arrays; slice if needed for K-fold
+            is_full = len(dates) == len(self._close.index)
+
+            def _get_indicator(names):
+                for name in names:
+                    if name in cached:
+                        arr = cached[name]
+                        if is_full:
+                            return pd.Series(arr, index=self._close.index)
+                        return pd.Series(arr, index=self._close.index).reindex(dates, method='ffill')
+                return None
 
             # RSI
-            rsi_col = next((c for c in ["rsi", "rsi_14"] if c in df_slice.columns), None)
-            if rsi_col:
-                rsi = df_slice[rsi_col]
+            rsi = _get_indicator(["rsi", "rsi_14"])
+            if rsi is not None:
                 ob = float(genes.get("ti_rsi_overbought", 70))
                 os_ = float(genes.get("ti_rsi_oversold", 30))
                 block_buys[symbol] = block_buys[symbol] | (rsi > ob)
                 position_scale[symbol] *= (1.0 + weight * 0.5 * (rsi < os_))
 
             # ADX
-            adx_col = next((c for c in ["adx", "adx_14"] if c in df_slice.columns), None)
-            if adx_col:
-                adx = df_slice[adx_col]
+            adx = _get_indicator(["adx", "adx_14"])
+            if adx is not None:
                 adx_thresh = float(genes.get("ti_adx_threshold", 25))
                 adx_scale = float(genes.get("ti_adx_position_scale", 0.5))
                 weak_trend = adx < adx_thresh
                 position_scale[symbol] *= (1.0 - weight * (1.0 - adx_scale) * weak_trend)
 
             # NATR
-            natr_col = next((c for c in ["natr", "atr_14"] if c in df_slice.columns), None)
-            if natr_col:
-                natr = df_slice[natr_col]
+            natr = _get_indicator(["natr", "atr_14"])
+            if natr is not None:
                 natr_thresh = float(genes.get("ti_natr_threshold", 5.0))
                 natr_action = int(genes.get("ti_natr_risk_action", 0))
                 high_vol = natr > natr_thresh
@@ -349,19 +391,16 @@ class VectorbtFitnessEvaluator:
                     block_buys[symbol] = block_buys[symbol] | high_vol
 
             # MFI
-            mfi_col = next((c for c in ["mfi", "mfi_14"] if c in df_slice.columns), None)
-            if mfi_col:
-                mfi = df_slice[mfi_col]
+            mfi = _get_indicator(["mfi", "mfi_14"])
+            if mfi is not None:
                 mfi_ob = float(genes.get("ti_mfi_overbought", 80))
                 mfi_os = float(genes.get("ti_mfi_oversold", 20))
                 position_scale[symbol] *= (1.0 - weight * 0.4 * (mfi > mfi_ob))
                 position_scale[symbol] *= (1.0 + weight * 0.3 * (mfi < mfi_os))
 
             # MACD histogram
-            macd_col = next((c for c in ["macdhist", "macd_signal", "macd"]
-                             if c in df_slice.columns), None)
-            if macd_col:
-                macdhist = df_slice[macd_col]
+            macdhist = _get_indicator(["macdhist", "macd_signal", "macd"])
+            if macdhist is not None:
                 if genes.get("ti_macdhist_confirm", 0):
                     block_buys[symbol] = block_buys[symbol] | (macdhist <= 0)
                 if genes.get("ti_macdhist_exit_confirm", 0):
@@ -407,64 +446,67 @@ class VectorbtFitnessEvaluator:
         ma_signal = (spread * 10.0).clip(-1.0, 1.0)
         combined += ma_weight * ma_signal
 
+        is_full = len(dates) == len(self._close.index)
+
         for symbol in symbols:
-            df = self.data_feeds.get(symbol)
-            if df is None:
+            cached = self._aligned_indicators.get(symbol, {})
+            if not cached:
                 continue
-            df_slice = df.reindex(dates, method="ffill")
+
+            def _get(names):
+                for name in names:
+                    if name in cached:
+                        arr = cached[name]
+                        if is_full:
+                            return pd.Series(arr, index=self._close.index)
+                        return pd.Series(arr, index=self._close.index).reindex(dates, method='ffill')
+                return None
 
             # Bollinger Band signal
-            bb_top_col = next((c for c in ["bb_top", "bb_upper", "bb_upper_20"]
-                               if c in df_slice.columns), None)
-            bb_bot_col = next((c for c in ["bb_bot", "bb_lower", "bb_lower_20"]
-                               if c in df_slice.columns), None)
-            bb_mid_col = next((c for c in ["bb_mid", "bb_middle", "bb_middle_20"]
-                               if c in df_slice.columns), None)
-            if bb_top_col and bb_bot_col and bb_mid_col:
-                width = df_slice[bb_top_col] - df_slice[bb_bot_col]
+            bb_top = _get(["bb_top", "bb_upper", "bb_upper_20"])
+            bb_bot = _get(["bb_bot", "bb_lower", "bb_lower_20"])
+            bb_mid = _get(["bb_mid", "bb_middle", "bb_middle_20"])
+            if bb_top is not None and bb_bot is not None and bb_mid is not None:
+                width = bb_top - bb_bot
                 half = width / 2.0
-                pos = ((df_slice[bb_mid_col] - close_slice[symbol]) /
+                pos = ((bb_mid - close_slice[symbol]) /
                        half.replace(0, np.nan)).clip(-1, 1)
                 combined[symbol] += bb_weight * pos
 
             # Stochastic signal
-            slowk_col = next((c for c in ["slowk", "stoch_k"]
-                              if c in df_slice.columns), None)
-            slowd_col = next((c for c in ["slowd", "stoch_d"]
-                              if c in df_slice.columns), None)
-            if slowk_col and slowd_col:
+            slowk = _get(["slowk", "stoch_k"])
+            slowd = _get(["slowd", "stoch_d"])
+            if slowk is not None and slowd is not None:
                 stoch_ob = float(genes.get("sig_stoch_ob", 80))
                 stoch_os = float(genes.get("sig_stoch_os", 20))
                 mid = (stoch_ob + stoch_os) / 2.0
                 half_r = (stoch_ob - stoch_os) / 2.0
-                base = -(df_slice[slowk_col] - mid) / half_r
+                base = -(slowk - mid) / half_r
                 base = base.clip(-1, 1)
-                k_above_d = (df_slice[slowk_col] > df_slice[slowd_col]).astype(float)
-                k_oversold = (df_slice[slowk_col] < stoch_os + 10).astype(float)
-                k_overbought = (df_slice[slowk_col] > stoch_ob - 10).astype(float)
+                k_above_d = (slowk > slowd).astype(float)
+                k_oversold = (slowk < stoch_os + 10).astype(float)
+                k_overbought = (slowk > stoch_ob - 10).astype(float)
                 boost = (0.3 * k_above_d * k_oversold -
                          0.3 * (1 - k_above_d) * k_overbought)
                 combined[symbol] += stoch_weight * (base + boost).clip(-1, 1)
 
             # MACD signal
-            macd_col = next((c for c in ["macd"] if c in df_slice.columns), None)
-            signal_col = next((c for c in ["signal", "macd_signal"]
-                               if c in df_slice.columns), None)
-            if macd_col and signal_col:
-                hist = df_slice[macd_col] - df_slice[signal_col]
+            macd_val = _get(["macd"])
+            signal_val = _get(["signal", "macd_signal"])
+            if macd_val is not None and signal_val is not None:
+                hist = macd_val - signal_val
                 norm = (hist / close_slice[symbol].replace(0, np.nan) *
                         100.0 * 2.0).clip(-1, 1)
                 combined[symbol] += macd_weight * norm
 
             # RSI signal
-            rsi_col = next((c for c in ["rsi", "rsi_14"]
-                            if c in df_slice.columns), None)
-            if rsi_col:
+            rsi = _get(["rsi", "rsi_14"])
+            if rsi is not None:
                 rsi_ob = float(genes.get("sig_rsi_ob", 70))
                 rsi_os = float(genes.get("sig_rsi_os", 30))
                 mid = (rsi_ob + rsi_os) / 2.0
                 half_r = (rsi_ob - rsi_os) / 2.0
-                rsi_signal = -(df_slice[rsi_col] - mid) / half_r
+                rsi_signal = -(rsi - mid) / half_r
                 combined[symbol] += rsi_weight * rsi_signal.clip(-1, 1)
 
         if total_weight > 0.01:
@@ -484,6 +526,7 @@ class VectorbtFitnessEvaluator:
 
         Applies macro, TI filter, and ensemble signal masks when the
         corresponding genes are enabled; otherwise uses neutral defaults.
+        Implements initial allocation matching backtrader's behavior.
         """
         genes = trader.get_genes()
         short = int(genes['ma_short_period'])
@@ -493,11 +536,35 @@ class VectorbtFitnessEvaluator:
         tp_stop = float(genes['take_profit_pct']) / 100
         position_size_pct = float(genes['position_size_pct']) / 100
 
+        # Use pre-computed MA cache when evaluating full date range,
+        # fall back to on-demand computation for K-fold slices
+        is_full_range = (len(close_slice) == len(self._close)
+                         and close_slice.index[0] == self._close.index[0])
         ewm = (ma_type == 1)
-        fast_ma_obj = vbt.MA.run(close_slice, window=short, ewm=ewm)
-        slow_ma_obj = vbt.MA.run(close_slice, window=long_, ewm=ewm)
-        fast_ma = fast_ma_obj.ma
-        slow_ma = slow_ma_obj.ma
+        ma_cache = self._ema_cache if ewm else self._sma_cache
+
+        if is_full_range:
+            # Lookup from pre-computed cache (near-zero cost)
+            fast_ma = pd.DataFrame(
+                ma_cache.ma[short].values,
+                index=close_slice.index, columns=close_slice.columns
+            )
+            slow_ma = pd.DataFrame(
+                ma_cache.ma[long_].values,
+                index=close_slice.index, columns=close_slice.columns
+            )
+        else:
+            # K-fold slice: compute on demand
+            fast_ma_obj = vbt.MA.run(close_slice, window=short, ewm=ewm)
+            slow_ma_obj = vbt.MA.run(close_slice, window=long_, ewm=ewm)
+            fast_ma = pd.DataFrame(
+                fast_ma_obj.ma.values,
+                index=close_slice.index, columns=close_slice.columns
+            )
+            slow_ma = pd.DataFrame(
+                slow_ma_obj.ma.values,
+                index=close_slice.index, columns=close_slice.columns
+            )
 
         # Phase 3: macro masks
         macro = self._compute_macro_masks(close_slice, genes)
@@ -531,57 +598,79 @@ class VectorbtFitnessEvaluator:
             index=close_slice.index, columns=close_slice.columns
         )
 
-        # Normalize MA DataFrames to have same columns as close_slice
-        # (vbt.MA.run may return MultiIndex columns)
-        fast_ma_clean = pd.DataFrame(
-            fast_ma.values, index=close_slice.index,
-            columns=close_slice.columns
-        )
-        slow_ma_clean = pd.DataFrame(
-            slow_ma.values, index=close_slice.index,
-            columns=close_slice.columns
-        )
+        # fast_ma / slow_ma are already clean DataFrames with matching columns
 
         # Phase 3: ensemble signals (or fall back to MA crossover)
         ens_entries, ens_exits = self._compute_ensemble_signals(
-            close_slice, genes, fast_ma_clean, slow_ma_clean
+            close_slice, genes, fast_ma, slow_ma
         )
 
         if ens_entries is not None:
             entries = ens_entries & ~combined_block
             exits = ens_exits | ti["force_exit"]
         else:
-            # MA crossed signals may have MultiIndex columns from vbt.MA;
-            # extract values and rebuild with matching columns for & ops
-            raw_entries = fast_ma_obj.ma_crossed_above(slow_ma_obj.ma)
-            raw_exits = fast_ma_obj.ma_crossed_below(slow_ma_obj.ma)
-            entries_df = pd.DataFrame(
-                raw_entries.values, index=close_slice.index,
-                columns=close_slice.columns
-            )
-            exits_df = pd.DataFrame(
-                raw_exits.values, index=close_slice.index,
-                columns=close_slice.columns
-            )
-            entries = entries_df & ~combined_block
-            exits = exits_df | ti["force_exit"]
+            # MA crossover signals using plain numpy (avoids vbt overhead)
+            fast_v = fast_ma.values
+            slow_v = slow_ma.values
+            cross_above = (fast_v[1:] > slow_v[1:]) & (fast_v[:-1] <= slow_v[:-1])
+            cross_below = (fast_v[1:] < slow_v[1:]) & (fast_v[:-1] >= slow_v[:-1])
+            entries_arr = np.vstack([np.zeros((1, fast_v.shape[1]), dtype=bool), cross_above])
+            exits_arr = np.vstack([np.zeros((1, fast_v.shape[1]), dtype=bool), cross_below])
+            entries = pd.DataFrame(entries_arr, index=close_slice.index,
+                                   columns=close_slice.columns) & ~combined_block
+            exits = pd.DataFrame(exits_arr, index=close_slice.index,
+                                 columns=close_slice.columns) | ti["force_exit"]
 
-        # Apply macro sl/tp adjustments as per-row varying stops
-        sl_array = (sl_stop * adj_sl).values
-        tp_array = (tp_stop * adj_tp).values
+        # Initial allocation: force buy on first valid bar for each stock
+        # Matches backtrader's _make_initial_allocation() behavior
+        initial_alloc_pct = getattr(config, 'INITIAL_ALLOCATION_PCT', 0.0)
+        num_symbols = len(close_slice.columns)
+        if initial_alloc_pct > 0:
+            for col in close_slice.columns:
+                valid_mask = close_slice[col].notna()
+                if valid_mask.any():
+                    first_valid_idx = valid_mask.idxmax()
+                    entries.loc[first_valid_idx, col] = True
+
+        # Determine if macro/TI genes modify stops per-bar
+        macro_active = bool(genes.get('macro_enabled', 0)) and self.macro_df is not None
+        ti_active = bool(genes.get('ti_enabled', 0))
+        needs_variable_stops = macro_active or ti_active
 
         # Size: apply combined position scale
         size_array = (position_size_pct * combined_scale).values
+
+        # Initial allocation sizing: on the first bar, buy an equal share
+        # of the allocation capital for each stock.
+        if initial_alloc_pct > 0:
+            alloc_per_stock = (initial_alloc_pct / 100.0) / num_symbols
+            for col_idx, col in enumerate(close_slice.columns):
+                valid_mask = close_slice[col].notna()
+                if valid_mask.any():
+                    first_valid_idx = valid_mask.idxmax()
+                    row_idx = close_slice.index.get_loc(first_valid_idx)
+                    size_array[row_idx, col_idx] = alloc_per_stock
+
+        if needs_variable_stops:
+            # Per-bar varying stops when macro/TI modify them
+            sl_param = (sl_stop * adj_sl).values
+            tp_param = (tp_stop * adj_tp).values
+        else:
+            # Scalar stops — faster path (~20% less overhead)
+            sl_param = sl_stop
+            tp_param = tp_stop
 
         pf = vbt.Portfolio.from_signals(
             close=close_slice,
             entries=entries,
             exits=exits,
-            sl_stop=sl_array,
-            tp_stop=tp_array,
+            sl_stop=sl_param,
+            tp_stop=tp_param,
             size=size_array,
             size_type='percent',
-            init_cash=config.INITIAL_CASH / len(self.valid_symbols),
+            init_cash=config.INITIAL_CASH,
+            cash_sharing=True,
+            group_by=True,
             fees=config.COMMISSION,
             freq='D',
             call_seq='auto',
@@ -591,9 +680,24 @@ class VectorbtFitnessEvaluator:
 
     def _extract_results(self, pf) -> Dict[str, Any]:
         """Extract standardized results dict from a vectorbt Portfolio."""
-        total_return = float(pf.total_return().mean()) * 100
-        sharpe_ratio = float(pf.sharpe_ratio().mean())
-        max_drawdown = float(-pf.max_drawdown().mean()) * 100
+        # With cash_sharing=True + group_by=True, pf returns portfolio-level
+        # scalars directly (not per-symbol).
+        starting_value = float(pf.init_cash)
+        ending_value = float(pf.final_value())
+        total_return = ((ending_value - starting_value) / starting_value) * 100
+
+        # Portfolio-level Sharpe from the grouped portfolio value series
+        portfolio_value = pf.value()
+        daily_returns = portfolio_value.pct_change().dropna()
+        if len(daily_returns) > 1 and daily_returns.std() > 0:
+            sharpe_ratio = float(daily_returns.mean() / daily_returns.std() * np.sqrt(252))
+        else:
+            sharpe_ratio = 0.0
+
+        # Portfolio-level max drawdown
+        cummax = portfolio_value.cummax()
+        drawdowns = (portfolio_value - cummax) / cummax
+        max_drawdown = float(drawdowns.min()) * 100  # negative percentage
 
         # Clamp Sharpe to same range as backtrader evaluator
         if np.isnan(sharpe_ratio):
@@ -619,12 +723,8 @@ class VectorbtFitnessEvaluator:
                 'win_rate': (won / total * 100) if total > 0 else 0.0,
             }
 
-        # Starting/ending values
-        init_cash_total = config.INITIAL_CASH / len(self.valid_symbols) * len(self.valid_symbols)
-        ending_value = float(pf.final_value().sum())
-
         return {
-            'starting_value': init_cash_total,
+            'starting_value': starting_value,
             'ending_value': ending_value,
             'total_return': total_return,
             'sharpe_ratio': sharpe_ratio,

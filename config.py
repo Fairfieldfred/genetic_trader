@@ -4,42 +4,41 @@ Auto-generated from Flutter UI.
 """
 
 # Database configuration
-DATABASE_PATH = "/Users/fred/Development/Genetic Trader/SPY_Data.db"
+DATABASE_PATH = "/Users/macmini/Dev/Genetic Trader/SPY_Data.db"
 TEST_SYMBOL = "AAPL"
 
 # Multi-stock portfolio configuration
 USE_PORTFOLIO = True
-PORTFOLIO_SIZE = 30
+PORTFOLIO_SIZE = 50
 PORTFOLIO_STOCKS = [
 ]
 AUTO_SELECT_PORTFOLIO = True
 PORTFOLIO_SECTORS = [
-    "Information Technology",
 ]
 
 # Data split configuration
 TRAIN_START_DATE = "2016-03-09"
-TRAIN_END_DATE = "2024-03-09"
-TEST_START_DATE = "2024-03-10"
+TRAIN_END_DATE = "2025-03-09"
+TEST_START_DATE = "2025-03-10"
 TEST_END_DATE = "2026-03-06"
 USE_OUT_OF_SAMPLE_TEST = True
-TRAINING_YEARS = 8
+TRAINING_YEARS = 9
 
 # K-Fold Temporal Cross-Validation
-USE_KFOLD_VALIDATION = False
-KFOLD_NUM_FOLDS = 2
-KFOLD_FOLD_YEARS = 3
-KFOLD_ALLOW_OVERLAP = False
+USE_KFOLD_VALIDATION = True
+KFOLD_NUM_FOLDS = 7
+KFOLD_FOLD_YEARS = 2
+KFOLD_ALLOW_OVERLAP = True
 KFOLD_WEIGHT_RECENT = False
 KFOLD_RECENT_WEIGHT_FACTOR = 1.5
 KFOLD_MIN_BARS_PER_FOLD = 200
 
 # Genetic algorithm configuration
-POPULATION_SIZE = 30
-NUM_GENERATIONS = 40
-MUTATION_RATE = 0.2
-CROSSOVER_RATE = 0.9
-ELITISM_COUNT = 4  # 12.0% of population
+POPULATION_SIZE = 100
+NUM_GENERATIONS = 200
+MUTATION_RATE = 0.5
+CROSSOVER_RATE = 0.7
+ELITISM_COUNT = 20  # 20.0% of population
 
 # Tournament selection
 TOURNAMENT_SIZE = 4
@@ -174,7 +173,7 @@ COMMISSION = 0.001  # 0.1% commission per trade
 # Percentage of capital to allocate equally across all stocks at start
 # Remaining percentage stays as cash for strategy signals
 # Example: 80.0 means 80% divided equally among stocks, 20% reserved for trading
-INITIAL_ALLOCATION_PCT = 80.0  # Range: 0.0 to 100.0
+INITIAL_ALLOCATION_PCT = 75.0  # Range: 0.0 to 100.0
 
 # Fitness function weights
 FITNESS_WEIGHTS = {
@@ -201,8 +200,5 @@ CHECKPOINT_DIR = "checkpoints"
 RANDOM_SEED = 42
 
 # Performance optimization
-# Note: USE_PARALLEL_EVALUATION is ignored when BACKTESTING_ENGINE='vectorbt'
-# (population-level batching is handled internally by VectorbtFitnessEvaluator)
-VECTORBT_DEDUP = True  # Deduplicate identical chromosomes in vectorbt batch evaluation
 USE_PARALLEL_EVALUATION = True  # Use multiprocessing for fitness evaluation
 MAX_PARALLEL_WORKERS = None     # None = use all CPU cores, or specify number

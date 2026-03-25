@@ -3,7 +3,7 @@ import '../models/evolution_result.dart';
 
 /// Service for loading evolution results from the results directory
 class ResultsService {
-  static const _resultsDir = '/Users/fred/Development/Genetic Trader/results';
+  static const _resultsDir = '/Users/macmini/Dev/Genetic Trader/results';
 
   /// Load all evolution results, sorted by date descending
   Future<List<EvolutionResult>> loadAllResults() async {

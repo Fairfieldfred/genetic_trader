@@ -216,7 +216,7 @@ class ConfigViewModel extends ChangeNotifier {
   Future<void> saveConfig() async {
     try {
       // Use absolute path to the Genetic Trader directory
-      const configPath = '/Users/fred/Development/Genetic Trader/config.py';
+      const configPath = '/Users/macmini/Dev/Genetic Trader/config.py';
       final configFile = File(configPath);
 
       // Write the Python config file

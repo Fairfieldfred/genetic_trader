@@ -27,7 +27,7 @@ class PythonBridge {
     try {
       // Use absolute path to the Genetic Trader directory
       // macOS sandboxing means we can't use relative paths
-      const workingDir = '/Users/fred/Development/Genetic Trader';
+      const workingDir = '/Users/macmini/Dev/Genetic Trader';
 
       if (kDebugMode) {
         print('Starting evolution in: $workingDir');
