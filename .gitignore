@@ -28,3 +28,4 @@ logs/
 
 # Worktrees
 .claude/worktrees/
+SPY_Data.db
