@@ -59,9 +59,21 @@ class GeneticConfig {
   // Ensemble signals
   bool useEnsembleSignals;
 
+  // Advanced gene groups
+  bool useAdvancedOscillators;
+  bool useTrendSignals;
+  bool useVolumeSignals;
+  bool useVolatilityBreakout;
+  bool useSupportResistance;
+  bool useRegimeDetection;
+  bool useAdvancedSizing;
+
   // Out-of-sample testing
   bool useOutOfSampleTest;
   int trainingYears;
+
+  // Index selection for Dart engine (multi-select)
+  Set<String> selectedIndices;
 
   // K-Fold cross-validation
   bool useKfoldValidation;
@@ -110,8 +122,16 @@ class GeneticConfig {
     this.useMacroData = false,
     this.useTechnicalIndicators = false,
     this.useEnsembleSignals = false,
+    this.useAdvancedOscillators = false,
+    this.useTrendSignals = false,
+    this.useVolumeSignals = false,
+    this.useVolatilityBreakout = false,
+    this.useSupportResistance = false,
+    this.useRegimeDetection = false,
+    this.useAdvancedSizing = false,
     this.useOutOfSampleTest = true,
     this.trainingYears = 8,
+    this.selectedIndices = const {'DJIA'},
     this.useKfoldValidation = false,
     this.kfoldNumFolds = 2,
     this.kfoldFoldYears = 3,
@@ -156,8 +176,18 @@ class GeneticConfig {
       useMacroData: json['USE_MACRO_DATA'] ?? false,
       useTechnicalIndicators: json['USE_TECHNICAL_INDICATORS'] ?? false,
       useEnsembleSignals: json['USE_ENSEMBLE_SIGNALS'] ?? false,
+      useAdvancedOscillators: json['USE_ADVANCED_OSCILLATORS'] ?? false,
+      useTrendSignals: json['USE_TREND_SIGNALS'] ?? false,
+      useVolumeSignals: json['USE_VOLUME_SIGNALS'] ?? false,
+      useVolatilityBreakout: json['USE_VOLATILITY_BREAKOUT'] ?? false,
+      useSupportResistance: json['USE_SUPPORT_RESISTANCE'] ?? false,
+      useRegimeDetection: json['USE_REGIME_DETECTION'] ?? false,
+      useAdvancedSizing: json['USE_ADVANCED_SIZING'] ?? false,
       useOutOfSampleTest: json['USE_OUT_OF_SAMPLE_TEST'] ?? true,
       trainingYears: json['TRAINING_YEARS'] ?? 8,
+      selectedIndices: json['SELECTED_INDICES'] != null
+          ? Set<String>.from(json['SELECTED_INDICES'] as List)
+          : const {'DJIA'},
       useKfoldValidation: json['USE_KFOLD_VALIDATION'] ?? false,
       kfoldNumFolds: json['KFOLD_NUM_FOLDS'] ?? 2,
       kfoldFoldYears: json['KFOLD_FOLD_YEARS'] ?? 3,
@@ -202,8 +232,16 @@ class GeneticConfig {
       'USE_MACRO_DATA': useMacroData,
       'USE_TECHNICAL_INDICATORS': useTechnicalIndicators,
       'USE_ENSEMBLE_SIGNALS': useEnsembleSignals,
+      'USE_ADVANCED_OSCILLATORS': useAdvancedOscillators,
+      'USE_TREND_SIGNALS': useTrendSignals,
+      'USE_VOLUME_SIGNALS': useVolumeSignals,
+      'USE_VOLATILITY_BREAKOUT': useVolatilityBreakout,
+      'USE_SUPPORT_RESISTANCE': useSupportResistance,
+      'USE_REGIME_DETECTION': useRegimeDetection,
+      'USE_ADVANCED_SIZING': useAdvancedSizing,
       'USE_OUT_OF_SAMPLE_TEST': useOutOfSampleTest,
       'TRAINING_YEARS': trainingYears,
+      'SELECTED_INDICES': selectedIndices.toList(),
       'USE_KFOLD_VALIDATION': useKfoldValidation,
       'KFOLD_NUM_FOLDS': kfoldNumFolds,
       'KFOLD_FOLD_YEARS': kfoldFoldYears,
@@ -426,6 +464,88 @@ class GeneticConfig {
           '    \'sig_rsi_os\': (15, 40, int),');
     }
 
+    if (useAdvancedOscillators) {
+      buffer.writeln();
+      buffer.writeln('    # Advanced Oscillator genes');
+      buffer.writeln("    'adv_osc_enabled': (0, 1, int),");
+      buffer.writeln("    'wr_oversold': (-90, -60, float),");
+      buffer.writeln("    'wr_overbought': (-40, -10, float),");
+      buffer.writeln("    'cci_oversold': (-150, -80, float),");
+      buffer.writeln("    'cci_overbought': (80, 150, float),");
+      buffer.writeln("    'cmo_threshold': (10, 50, float),");
+      buffer.writeln("    'ao_zero_cross_confirm': (0, 1, int),");
+      buffer.writeln("    'stochrsi_ob': (75, 95, float),");
+      buffer.writeln("    'stochrsi_os': (5, 25, float),");
+      buffer.writeln("    'uo_overbought': (60, 80, float),");
+      buffer.writeln("    'uo_oversold': (20, 40, float),");
+      buffer.writeln("    'roc_period': (5, 20, int),");
+      buffer.writeln("    'roc_threshold': (-5.0, 5.0, float),");
+    }
+
+    if (useTrendSignals) {
+      buffer.writeln();
+      buffer.writeln('    # Trend Signal genes');
+      buffer.writeln("    'trend_sig_enabled': (0, 1, int),");
+      buffer.writeln("    'psar_filter_enabled': (0, 1, int),");
+      buffer.writeln("    'supertrend_filter_enabled': (0, 1, int),");
+      buffer.writeln("    'ichimoku_cloud_filter': (0, 1, int),");
+      buffer.writeln("    'linreg_slope_min': (-2.0, 2.0, float),");
+      buffer.writeln("    'linreg_r2_min': (0.0, 0.9, float),");
+      buffer.writeln("    'trix_zero_confirm': (0, 1, int),");
+    }
+
+    if (useVolumeSignals) {
+      buffer.writeln();
+      buffer.writeln('    # Volume Signal genes');
+      buffer.writeln("    'vol_sig_enabled': (0, 1, int),");
+      buffer.writeln("    'obv_trend_confirm': (0, 1, int),");
+      buffer.writeln("    'chaikin_threshold': (0.0, 1.0, float),");
+      buffer.writeln("    'force_index_confirm': (0, 1, int),");
+      buffer.writeln("    'vwap_filter_mode': (0, 2, int),");
+      buffer.writeln("    'vwma_vs_sma_confirm': (0, 1, int),");
+      buffer.writeln("    'klinger_confirm': (0, 1, int),");
+      buffer.writeln("    'nvi_trend_confirm': (0, 1, int),");
+    }
+
+    if (useVolatilityBreakout) {
+      buffer.writeln();
+      buffer.writeln('    # Volatility & Breakout genes');
+      buffer.writeln("    'vb_enabled': (0, 1, int),");
+      buffer.writeln("    'donchian_breakout_confirm': (0, 1, int),");
+      buffer.writeln("    'keltner_filter_enabled': (0, 1, int),");
+      buffer.writeln("    'bb_pct_b_threshold': (0.0, 0.5, float),");
+      buffer.writeln("    'bb_squeeze_threshold': (2.0, 8.0, float),");
+      buffer.writeln("    'ulcer_max': (2.0, 15.0, float),");
+    }
+
+    if (useSupportResistance) {
+      buffer.writeln();
+      buffer.writeln('    # Support & Resistance genes');
+      buffer.writeln("    'sr_enabled': (0, 1, int),");
+      buffer.writeln("    'pivot_filter_enabled': (0, 1, int),");
+      buffer.writeln("    'pivot_proximity_pct': (0.5, 5.0, float),");
+      buffer.writeln("    'fib_filter_enabled': (0, 1, int),");
+      buffer.writeln("    'fib_level_pct': (1.0, 10.0, float),");
+    }
+
+    if (useRegimeDetection) {
+      buffer.writeln();
+      buffer.writeln('    # Market Regime Detection genes');
+      buffer.writeln("    'regime_enabled': (0, 1, int),");
+      buffer.writeln("    'regime_window': (10, 60, int),");
+      buffer.writeln("    'regime_sma200_filter': (0, 1, int),");
+      buffer.writeln("    'regime_trend_req_count': (1, 3, int),");
+    }
+
+    if (useAdvancedSizing) {
+      buffer.writeln();
+      buffer.writeln('    # Advanced Position Sizing genes');
+      buffer.writeln("    'sizing_model': (0, 3, int),");
+      buffer.writeln("    'kelly_fraction': (0.1, 1.0, float),");
+      buffer.writeln("    'atr_stop_multiple': (1.0, 4.0, float),");
+      buffer.writeln("    'fixed_risk_pct': (0.5, 3.0, float),");
+    }
+
     buffer.writeln('}');
     buffer.writeln();
 
@@ -485,6 +605,74 @@ class GeneticConfig {
       buffer.writeln('    \'sig_stoch_os\',');
       buffer.writeln('    \'sig_rsi_ob\',');
       buffer.writeln('    \'sig_rsi_os\',');
+    }
+
+    if (useAdvancedOscillators) {
+      buffer.writeln("    'adv_osc_enabled',");
+      buffer.writeln("    'wr_oversold',");
+      buffer.writeln("    'wr_overbought',");
+      buffer.writeln("    'cci_oversold',");
+      buffer.writeln("    'cci_overbought',");
+      buffer.writeln("    'cmo_threshold',");
+      buffer.writeln("    'ao_zero_cross_confirm',");
+      buffer.writeln("    'stochrsi_ob',");
+      buffer.writeln("    'stochrsi_os',");
+      buffer.writeln("    'uo_overbought',");
+      buffer.writeln("    'uo_oversold',");
+      buffer.writeln("    'roc_period',");
+      buffer.writeln("    'roc_threshold',");
+    }
+
+    if (useTrendSignals) {
+      buffer.writeln("    'trend_sig_enabled',");
+      buffer.writeln("    'psar_filter_enabled',");
+      buffer.writeln("    'supertrend_filter_enabled',");
+      buffer.writeln("    'ichimoku_cloud_filter',");
+      buffer.writeln("    'linreg_slope_min',");
+      buffer.writeln("    'linreg_r2_min',");
+      buffer.writeln("    'trix_zero_confirm',");
+    }
+
+    if (useVolumeSignals) {
+      buffer.writeln("    'vol_sig_enabled',");
+      buffer.writeln("    'obv_trend_confirm',");
+      buffer.writeln("    'chaikin_threshold',");
+      buffer.writeln("    'force_index_confirm',");
+      buffer.writeln("    'vwap_filter_mode',");
+      buffer.writeln("    'vwma_vs_sma_confirm',");
+      buffer.writeln("    'klinger_confirm',");
+      buffer.writeln("    'nvi_trend_confirm',");
+    }
+
+    if (useVolatilityBreakout) {
+      buffer.writeln("    'vb_enabled',");
+      buffer.writeln("    'donchian_breakout_confirm',");
+      buffer.writeln("    'keltner_filter_enabled',");
+      buffer.writeln("    'bb_pct_b_threshold',");
+      buffer.writeln("    'bb_squeeze_threshold',");
+      buffer.writeln("    'ulcer_max',");
+    }
+
+    if (useSupportResistance) {
+      buffer.writeln("    'sr_enabled',");
+      buffer.writeln("    'pivot_filter_enabled',");
+      buffer.writeln("    'pivot_proximity_pct',");
+      buffer.writeln("    'fib_filter_enabled',");
+      buffer.writeln("    'fib_level_pct',");
+    }
+
+    if (useRegimeDetection) {
+      buffer.writeln("    'regime_enabled',");
+      buffer.writeln("    'regime_window',");
+      buffer.writeln("    'regime_sma200_filter',");
+      buffer.writeln("    'regime_trend_req_count',");
+    }
+
+    if (useAdvancedSizing) {
+      buffer.writeln("    'sizing_model',");
+      buffer.writeln("    'kelly_fraction',");
+      buffer.writeln("    'atr_stop_multiple',");
+      buffer.writeln("    'fixed_risk_pct',");
     }
 
     buffer.writeln(']');
@@ -548,6 +736,16 @@ class GeneticConfig {
     buffer.writeln('RANDOM_SEED = ${_toPythonNullableInt(randomSeed)}');
     buffer.writeln();
 
+    buffer.writeln('# Advanced gene group flags');
+    buffer.writeln('USE_ADVANCED_OSCILLATORS = ${_toPythonBool(useAdvancedOscillators)}');
+    buffer.writeln('USE_TREND_SIGNALS = ${_toPythonBool(useTrendSignals)}');
+    buffer.writeln('USE_VOLUME_SIGNALS = ${_toPythonBool(useVolumeSignals)}');
+    buffer.writeln('USE_VOLATILITY_BREAKOUT = ${_toPythonBool(useVolatilityBreakout)}');
+    buffer.writeln('USE_SUPPORT_RESISTANCE = ${_toPythonBool(useSupportResistance)}');
+    buffer.writeln('USE_REGIME_DETECTION = ${_toPythonBool(useRegimeDetection)}');
+    buffer.writeln('USE_ADVANCED_SIZING = ${_toPythonBool(useAdvancedSizing)}');
+    buffer.writeln();
+
     buffer.writeln('# Performance optimization');
     buffer.writeln('USE_PARALLEL_EVALUATION = ${_toPythonBool(useParallelEvaluation)}  # Use multiprocessing for fitness evaluation');
     buffer.writeln('MAX_PARALLEL_WORKERS = ${_toPythonNullableInt(maxParallelWorkers)}     # None = use all CPU cores, or specify number');
@@ -587,8 +785,16 @@ class GeneticConfig {
     bool? useMacroData,
     bool? useTechnicalIndicators,
     bool? useEnsembleSignals,
+    bool? useAdvancedOscillators,
+    bool? useTrendSignals,
+    bool? useVolumeSignals,
+    bool? useVolatilityBreakout,
+    bool? useSupportResistance,
+    bool? useRegimeDetection,
+    bool? useAdvancedSizing,
     bool? useOutOfSampleTest,
     int? trainingYears,
+    Set<String>? selectedIndices,
     bool? useKfoldValidation,
     int? kfoldNumFolds,
     int? kfoldFoldYears,
@@ -631,9 +837,22 @@ class GeneticConfig {
           useTechnicalIndicators ?? this.useTechnicalIndicators,
       useEnsembleSignals:
           useEnsembleSignals ?? this.useEnsembleSignals,
+      useAdvancedOscillators:
+          useAdvancedOscillators ?? this.useAdvancedOscillators,
+      useTrendSignals: useTrendSignals ?? this.useTrendSignals,
+      useVolumeSignals: useVolumeSignals ?? this.useVolumeSignals,
+      useVolatilityBreakout:
+          useVolatilityBreakout ?? this.useVolatilityBreakout,
+      useSupportResistance:
+          useSupportResistance ?? this.useSupportResistance,
+      useRegimeDetection:
+          useRegimeDetection ?? this.useRegimeDetection,
+      useAdvancedSizing:
+          useAdvancedSizing ?? this.useAdvancedSizing,
       useOutOfSampleTest:
           useOutOfSampleTest ?? this.useOutOfSampleTest,
       trainingYears: trainingYears ?? this.trainingYears,
+      selectedIndices: selectedIndices ?? this.selectedIndices,
       useKfoldValidation:
           useKfoldValidation ?? this.useKfoldValidation,
       kfoldNumFolds: kfoldNumFolds ?? this.kfoldNumFolds,

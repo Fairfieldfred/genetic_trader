@@ -176,6 +176,56 @@ class ConfigViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Advanced Gene Groups
+  void updateUseAdvancedOscillators(bool value) {
+    _config = _config.copyWith(useAdvancedOscillators: value);
+    notifyListeners();
+  }
+
+  void updateUseTrendSignals(bool value) {
+    _config = _config.copyWith(useTrendSignals: value);
+    notifyListeners();
+  }
+
+  void updateUseVolumeSignals(bool value) {
+    _config = _config.copyWith(useVolumeSignals: value);
+    notifyListeners();
+  }
+
+  void updateUseVolatilityBreakout(bool value) {
+    _config = _config.copyWith(useVolatilityBreakout: value);
+    notifyListeners();
+  }
+
+  void updateUseSupportResistance(bool value) {
+    _config = _config.copyWith(useSupportResistance: value);
+    notifyListeners();
+  }
+
+  void updateUseRegimeDetection(bool value) {
+    _config = _config.copyWith(useRegimeDetection: value);
+    notifyListeners();
+  }
+
+  void updateUseAdvancedSizing(bool value) {
+    _config = _config.copyWith(useAdvancedSizing: value);
+    notifyListeners();
+  }
+
+  // Index Selection (multi-select)
+  void toggleIndex(String index) {
+    final current = Set<String>.from(_config.selectedIndices);
+    if (current.contains(index)) {
+      if (current.length > 1) {
+        current.remove(index);
+      }
+    } else {
+      current.add(index);
+    }
+    _config = _config.copyWith(selectedIndices: current);
+    notifyListeners();
+  }
+
   // K-Fold Cross-Validation
   void updateUseKfoldValidation(bool value) {
     _config = _config.copyWith(useKfoldValidation: value);

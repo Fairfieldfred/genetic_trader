@@ -1,6 +1,9 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/services/database_service.dart';
+import '../../core/services/data_sync_service.dart';
+import '../../core/services/index_service.dart';
+import '../../core/services/yahoo_finance_service.dart';
 import '../../viewmodels/config_viewmodel.dart';
 
 /// Configuration screen for editing genetic algorithm parameters
@@ -55,16 +58,18 @@ class ConfigScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Database Selection
+              // Data Source — index selection + sync
               _buildSection(
                 context,
-                title: 'Database',
-                icon: Icons.storage,
-                subtitle: config.databasePath,
+                title: 'Data Source',
+                icon: Icons.cloud_download,
+                subtitle:
+                    '${_totalSymbolCount(config.selectedIndices)}'
+                    ' symbols selected',
                 children: [
-                  _DatabaseSelector(
-                    currentPath: config.databasePath,
-                    onChanged: viewModel.updateDatabasePath,
+                  _ConfigIndexSelector(
+                    selectedIndices: config.selectedIndices,
+                    onToggle: viewModel.toggleIndex,
                   ),
                 ],
               ),
@@ -971,128 +976,227 @@ class ConfigScreen extends StatelessWidget {
   }
 }
 
-/// Database selector with preset options and file browser.
-class _DatabaseSelector extends StatelessWidget {
-  const _DatabaseSelector({
-    required this.currentPath,
-    required this.onChanged,
+/// Computes the deduplicated symbol count across selected indices.
+int _totalSymbolCount(Set<String> selectedIndices) {
+  final symbols = <String>{};
+  for (final name in selectedIndices) {
+    final idx = IndexType.values.firstWhere(
+      (t) => t.name.toUpperCase() == name.toUpperCase(),
+      orElse: () => IndexType.djia,
+    );
+    symbols.addAll(IndexService.getSymbols(idx));
+  }
+  return symbols.length;
+}
+
+/// Index multi-selector with sync controls for the config screen.
+class _ConfigIndexSelector extends StatefulWidget {
+  const _ConfigIndexSelector({
+    required this.selectedIndices,
+    required this.onToggle,
   });
 
-  final String currentPath;
-  final ValueChanged<String> onChanged;
+  final Set<String> selectedIndices;
+  final ValueChanged<String> onToggle;
 
-  static const _projectDir =
-      '/Users/macmini/Dev/Genetic Trader';
+  @override
+  State<_ConfigIndexSelector> createState() =>
+      _ConfigIndexSelectorState();
+}
 
-  static const _presets = [
-    _DbPreset(
-      label: 'S&P 500 (SPY_Data.db)',
-      path: '$_projectDir/SPY_Data.db',
-      description: '503 symbols, 10 years, with TI',
-    ),
-    _DbPreset(
-      label: 'Alpaca/Polygon',
-      path: '/Users/macmini/alpaca_Big_polygon.db',
-      description: '4656 symbols, 10 years, with TI',
-    ),
-  ];
+class _ConfigIndexSelectorState extends State<_ConfigIndexSelector> {
+  bool _isSyncing = false;
+  int _syncDone = 0;
+  int _syncTotal = 0;
+  String? _syncError;
+  bool _dbReady = false;
+  bool _dbChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkDatabase();
+  }
+
+  Future<void> _checkDatabase() async {
+    try {
+      final db = DatabaseService();
+      await db.open();
+      final symbols = IndexService.getSymbols(IndexType.djia);
+      final count = await db.getBarCount(symbols.first);
+      if (!mounted) return;
+      setState(() {
+        _dbReady = count > 0;
+        _dbChecked = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _dbReady = false;
+        _dbChecked = true;
+      });
+    }
+  }
+
+  Future<void> _syncData() async {
+    setState(() {
+      _isSyncing = true;
+      _syncDone = 0;
+      _syncTotal = 0;
+      _syncError = null;
+    });
+
+    try {
+      final db = DatabaseService();
+      await db.open();
+      final yahoo = YahooFinanceService();
+      final syncService = DataSyncService(yahoo: yahoo, db: db);
+
+      final indices = <IndexType>{};
+      for (final name in widget.selectedIndices) {
+        final idx = IndexType.values.firstWhere(
+          (t) => t.name.toUpperCase() == name.toUpperCase(),
+          orElse: () => IndexType.djia,
+        );
+        indices.add(idx);
+      }
+
+      final result = await syncService.syncIndices(
+        indices,
+        onProgress: (done, total) {
+          if (!mounted) return;
+          setState(() {
+            _syncDone = done;
+            _syncTotal = total;
+          });
+        },
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _isSyncing = false;
+        _dbReady = true;
+        if (result.symbolsFailed > 0) {
+          _syncError = '${result.symbolsSynced} synced, '
+              '${result.symbolsFailed} failed';
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSyncing = false;
+        _syncError = e.toString();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isPreset = _presets.any((p) => p.path == currentPath);
-    final dropdownValue = isPreset ? currentPath : '__custom__';
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<String>(
-          initialValue: dropdownValue,
-          decoration: const InputDecoration(
-            labelText: 'Database Source',
-            border: OutlineInputBorder(),
+        // Index checkboxes
+        for (final entry in [
+          ('DJIA', 'Dow Jones (30 stocks)'),
+          ('SP500', 'S&P 500 (503 stocks)'),
+          ('NASDAQ100', 'Nasdaq-100 (100 stocks)'),
+        ])
+          CheckboxListTile(
+            dense: true,
+            title: Text(entry.$2),
+            value: widget.selectedIndices.contains(entry.$1),
+            onChanged: (_) => widget.onToggle(entry.$1),
           ),
-          isExpanded: true,
-          items: [
-            for (final preset in _presets)
-              DropdownMenuItem(
-                value: preset.path,
-                child: Text(preset.label),
-              ),
-            if (!isPreset)
-              DropdownMenuItem(
-                value: '__custom__',
-                child: Text(
-                  'Custom: ${_fileName(currentPath)}',
+
+        const SizedBox(height: 12),
+
+        // Database status
+        if (_dbChecked)
+          ListTile(
+            dense: true,
+            leading: Icon(
+              _dbReady
+                  ? Icons.check_circle
+                  : Icons.warning_amber,
+              color: _dbReady ? cs.primary : cs.error,
+            ),
+            title: Text(
+              _dbReady
+                  ? 'Database ready'
+                  : 'No data — sync from Yahoo Finance',
+            ),
+          ),
+
+        // Sync progress
+        if (_isSyncing && _syncTotal > 0) ...[
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                LinearProgressIndicator(
+                  value: _syncDone / _syncTotal,
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  'Syncing $_syncDone / $_syncTotal '
+                  'symbols...',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        // Error
+        if (_syncError != null)
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              _syncError!,
+              style: TextStyle(
+                fontSize: 12,
+                color: cs.error,
               ),
-          ],
-          onChanged: (value) {
-            if (value != null && value != '__custom__') {
-              onChanged(value);
-            }
-          },
-        ),
+            ),
+          ),
+
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                _presetDescription(currentPath) ??
-                    currentPath,
-                style:
-                    Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
-                        ),
-                overflow: TextOverflow.ellipsis,
+
+        // Sync button
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _isSyncing ? null : _syncData,
+              icon: _isSyncing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.sync),
+              label: Text(
+                _isSyncing
+                    ? 'Syncing...'
+                    : _dbReady
+                        ? 'Re-sync Data'
+                        : 'Sync from Yahoo Finance',
               ),
             ),
-            TextButton.icon(
-              icon: const Icon(Icons.folder_open, size: 18),
-              label: const Text('Browse'),
-              onPressed: () async {
-                final result =
-                    await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['db', 'sqlite', 'sqlite3'],
-                  dialogTitle: 'Select Database File',
-                );
-                if (result != null &&
-                    result.files.single.path != null) {
-                  onChanged(result.files.single.path!);
-                }
-              },
-            ),
-          ],
+          ),
         ),
       ],
     );
   }
-
-  String? _presetDescription(String path) {
-    for (final preset in _presets) {
-      if (preset.path == path) return preset.description;
-    }
-    return null;
-  }
-
-  static String _fileName(String path) {
-    final idx = path.lastIndexOf('/');
-    return idx >= 0 ? path.substring(idx + 1) : path;
-  }
-}
-
-class _DbPreset {
-  const _DbPreset({
-    required this.label,
-    required this.path,
-    required this.description,
-  });
-
-  final String label;
-  final String path;
-  final String description;
 }
 
 /// Displays computed train and test date ranges.

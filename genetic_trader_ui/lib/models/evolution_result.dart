@@ -431,6 +431,12 @@ class FitnessHistoryEntry {
   final double stdFitness;
   final List<GeneChange>? geneChanges;
 
+  /// Group activity rates for this generation.
+  final Map<String, double>? groupActivityRates;
+
+  /// Average active genes across the population.
+  final int? avgActiveGenes;
+
   FitnessHistoryEntry({
     required this.generation,
     required this.bestFitness,
@@ -438,6 +444,8 @@ class FitnessHistoryEntry {
     required this.worstFitness,
     required this.stdFitness,
     this.geneChanges,
+    this.groupActivityRates,
+    this.avgActiveGenes,
   });
 
   /// Parse a CSV row (after header)

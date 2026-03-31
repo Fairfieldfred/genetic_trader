@@ -41,6 +41,42 @@ class MacroAwarePandasData(bt.feeds.PandasData):
         'slowd',
         'macd',
         'signal',
+        # Advanced indicator lines
+        'wr',
+        'cci',
+        'cmo',
+        'ao',
+        'stochrsi_k',
+        'stochrsi_d',
+        'uo',
+        'roc',
+        'psar',
+        'supertrend_dir',
+        'ichimoku_above_cloud',
+        'linreg_slope',
+        'linreg_r2',
+        'trix',
+        'trix_signal',
+        'chaikin',
+        'force_index',
+        'vwap',
+        'vwma_20',
+        'klinger',
+        'klinger_signal',
+        'nvi',
+        'nvi_sma',
+        'donchian_upper',
+        'donchian_lower',
+        'keltner_upper',
+        'bb_pct_b',
+        'bb_width',
+        'ulcer',
+        'pivot_r1',
+        'pivot_s1',
+        'fib_38',
+        'fib_62',
+        'sma_20',
+        'atr_14',
     )
 
     params = (
@@ -61,6 +97,41 @@ class MacroAwarePandasData(bt.feeds.PandasData):
         ('slowd', -1),
         ('macd', -1),
         ('signal', -1),
+        ('wr', -1),
+        ('cci', -1),
+        ('cmo', -1),
+        ('ao', -1),
+        ('stochrsi_k', -1),
+        ('stochrsi_d', -1),
+        ('uo', -1),
+        ('roc', -1),
+        ('psar', -1),
+        ('supertrend_dir', -1),
+        ('ichimoku_above_cloud', -1),
+        ('linreg_slope', -1),
+        ('linreg_r2', -1),
+        ('trix', -1),
+        ('trix_signal', -1),
+        ('chaikin', -1),
+        ('force_index', -1),
+        ('vwap', -1),
+        ('vwma_20', -1),
+        ('klinger', -1),
+        ('klinger_signal', -1),
+        ('nvi', -1),
+        ('nvi_sma', -1),
+        ('donchian_upper', -1),
+        ('donchian_lower', -1),
+        ('keltner_upper', -1),
+        ('bb_pct_b', -1),
+        ('bb_width', -1),
+        ('ulcer', -1),
+        ('pivot_r1', -1),
+        ('pivot_s1', -1),
+        ('fib_38', -1),
+        ('fib_62', -1),
+        ('sma_20', -1),
+        ('atr_14', -1),
     )
 
 
@@ -296,6 +367,60 @@ class PortfolioGeneticStrategy(GeneticStrategy):
         ('sig_stoch_os', 20),
         ('sig_rsi_ob', 70),
         ('sig_rsi_os', 30),
+        # Advanced Oscillator params (disabled by default)
+        ('adv_osc_enabled', 0),
+        ('wr_oversold', -80),
+        ('wr_overbought', -20),
+        ('cci_oversold', -100),
+        ('cci_overbought', 100),
+        ('cmo_threshold', 25.0),
+        ('ao_zero_cross_confirm', 0),
+        ('stochrsi_ob', 80.0),
+        ('stochrsi_os', 20.0),
+        ('uo_overbought', 70.0),
+        ('uo_oversold', 30.0),
+        ('roc_period', 12),
+        ('roc_threshold', 0.0),
+        # Trend Signal params (disabled by default)
+        ('trend_sig_enabled', 0),
+        ('psar_filter_enabled', 0),
+        ('supertrend_filter_enabled', 0),
+        ('ichimoku_cloud_filter', 0),
+        ('linreg_slope_min', -999.0),
+        ('linreg_r2_min', 0.0),
+        ('trix_zero_confirm', 0),
+        # Volume Signal params (disabled by default)
+        ('vol_sig_enabled', 0),
+        ('obv_trend_confirm', 0),
+        ('chaikin_threshold', 0.0),
+        ('force_index_confirm', 0),
+        ('vwap_filter_mode', 0),
+        ('vwma_vs_sma_confirm', 0),
+        ('klinger_confirm', 0),
+        ('nvi_trend_confirm', 0),
+        # Volatility & Breakout params (disabled by default)
+        ('vb_enabled', 0),
+        ('donchian_breakout_confirm', 0),
+        ('keltner_filter_enabled', 0),
+        ('bb_pct_b_threshold', 1.0),
+        ('bb_squeeze_threshold', 2.0),
+        ('ulcer_max', 999.0),
+        # Support & Resistance params (disabled by default)
+        ('sr_enabled', 0),
+        ('pivot_filter_enabled', 0),
+        ('pivot_proximity_pct', 2.0),
+        ('fib_filter_enabled', 0),
+        ('fib_level_pct', 3.0),
+        # Regime Detection params (disabled by default)
+        ('regime_enabled', 0),
+        ('regime_window', 20),
+        ('regime_sma200_filter', 0),
+        ('regime_trend_req_count', 1),
+        # Advanced Sizing params (disabled by default)
+        ('sizing_model', 0),
+        ('kelly_fraction', 0.5),
+        ('atr_stop_multiple', 2.0),
+        ('fixed_risk_pct', 2.0),
     )
 
     def __init__(self):
@@ -403,9 +528,21 @@ class PortfolioGeneticStrategy(GeneticStrategy):
             # Compute per-stock technical indicator modifiers
             ti = self._compute_technical_context(data)
 
-            # Combine macro + TI contexts (multiplicative scales, OR booleans)
-            block_buys = macro['block_buys'] or ti['block_buys']
-            position_scale = macro['position_scale'] * ti['position_scale']
+            # Compute new context modifiers
+            adv_osc = self._compute_advanced_oscillator_context(data)
+            trend_sig = self._compute_trend_signal_context(data)
+            vol_sig = self._compute_volume_signal_context(data)
+            vb = self._compute_volatility_breakout_context(data)
+            sr = self._compute_support_resistance_context(data)
+            regime_ctx = self._compute_regime_context(data)
+
+            # Combine all contexts
+            block_buys = (macro['block_buys'] or ti['block_buys'] or
+                          adv_osc.get('block_buys', False) or trend_sig.get('block_buys', False) or
+                          vol_sig.get('block_buys', False) or vb.get('block_buys', False) or
+                          sr.get('block_buys', False) or regime_ctx.get('block_buys', False))
+            position_scale = (macro['position_scale'] * ti['position_scale'] *
+                              adv_osc.get('position_scale', 1.0) * vol_sig.get('position_scale', 1.0))
             stop_loss_adj = macro['stop_loss_adj'] * ti['stop_loss_adj']
             take_profit_adj = macro['take_profit_adj'] * ti['take_profit_adj']
 
@@ -429,12 +566,19 @@ class PortfolioGeneticStrategy(GeneticStrategy):
                     if block_buys:
                         continue
 
-                    # Apply combined position scale
-                    adjusted_pct = (
-                        self.params.position_size_pct * position_scale
-                    )
-                    cash = self.broker.getcash()
-                    size = int((cash * adjusted_pct / 100) / data.close[0])
+                    # Apply combined position scale with advanced sizing
+                    if self.params.sizing_model in (1, 3):
+                        size = self._compute_position_size_direct(data, position_scale)
+                    elif self.params.sizing_model == 2:
+                        adjusted_pct = self.params.position_size_pct * position_scale * self.params.kelly_fraction
+                        cash = self.broker.getcash()
+                        size = int((cash * adjusted_pct / 100) / data.close[0])
+                    else:
+                        adjusted_pct = (
+                            self.params.position_size_pct * position_scale
+                        )
+                        cash = self.broker.getcash()
+                        size = int((cash * adjusted_pct / 100) / data.close[0])
 
                     if size > 0:
                         self.log(
@@ -656,6 +800,211 @@ class PortfolioGeneticStrategy(GeneticStrategy):
         context['position_scale'] = max(0.1, context['position_scale'])
 
         return context
+
+    def _compute_advanced_oscillator_context(self, data):
+        """Evaluate advanced oscillator conditions."""
+        if not self.params.adv_osc_enabled:
+            return {'block_buys': False, 'position_scale': 1.0}
+        block = False
+        scale = 1.0
+        wr_val = self._get_line(data, 'wr')
+        if wr_val is not None:
+            if wr_val > self.params.wr_overbought:
+                block = True
+            elif wr_val < self.params.wr_oversold:
+                scale *= 1.1
+        cci_val = self._get_line(data, 'cci')
+        if cci_val is not None:
+            if cci_val > self.params.cci_overbought:
+                block = True
+            elif cci_val < self.params.cci_oversold:
+                scale *= 1.1
+        cmo_val = self._get_line(data, 'cmo')
+        if cmo_val is not None:
+            if abs(cmo_val) < self.params.cmo_threshold:
+                scale *= 0.7
+        ao_val = self._get_line(data, 'ao')
+        if ao_val is not None and self.params.ao_zero_cross_confirm:
+            if ao_val < 0:
+                block = True
+        stochrsi_k_val = self._get_line(data, 'stochrsi_k')
+        if stochrsi_k_val is not None and stochrsi_k_val > self.params.stochrsi_ob:
+            block = True
+        uo_val = self._get_line(data, 'uo')
+        if uo_val is not None:
+            if uo_val > self.params.uo_overbought:
+                block = True
+            elif uo_val < self.params.uo_oversold:
+                scale *= 1.1
+        roc_val = self._get_line(data, 'roc')
+        if roc_val is not None and self.params.roc_threshold != 0:
+            if self.params.roc_threshold > 0 and roc_val < self.params.roc_threshold:
+                block = True
+            elif self.params.roc_threshold < 0 and roc_val > self.params.roc_threshold:
+                block = True
+        scale = max(0.1, scale)
+        return {'block_buys': block, 'position_scale': scale}
+
+    def _compute_trend_signal_context(self, data):
+        """Evaluate trend signal conditions."""
+        if not self.params.trend_sig_enabled:
+            return {'block_buys': False}
+        block = False
+        close_val = data.close[0]
+        if self.params.psar_filter_enabled:
+            psar_val = self._get_line(data, 'psar')
+            if psar_val is not None and close_val < psar_val:
+                block = True
+        if self.params.supertrend_filter_enabled:
+            st_dir = self._get_line(data, 'supertrend_dir')
+            if st_dir is not None and st_dir < 0:
+                block = True
+        if self.params.ichimoku_cloud_filter:
+            ichi_val = self._get_line(data, 'ichimoku_above_cloud')
+            if ichi_val is not None and ichi_val < 0:
+                block = True
+        lr_slope_val = self._get_line(data, 'linreg_slope')
+        if lr_slope_val is not None and lr_slope_val < self.params.linreg_slope_min:
+            block = True
+        lr_r2_val = self._get_line(data, 'linreg_r2')
+        if lr_r2_val is not None and lr_r2_val < self.params.linreg_r2_min:
+            block = True
+        if self.params.trix_zero_confirm:
+            trix_val = self._get_line(data, 'trix')
+            if trix_val is not None and trix_val < 0:
+                block = True
+        return {'block_buys': block}
+
+    def _compute_volume_signal_context(self, data):
+        """Evaluate volume signal conditions."""
+        if not self.params.vol_sig_enabled:
+            return {'block_buys': False, 'position_scale': 1.0}
+        block = False
+        scale = 1.0
+        close_val = data.close[0]
+        if self.params.chaikin_threshold > 0:
+            ch_val = self._get_line(data, 'chaikin')
+            if ch_val is not None and ch_val < self.params.chaikin_threshold:
+                block = True
+        if self.params.force_index_confirm:
+            fi_val = self._get_line(data, 'force_index')
+            if fi_val is not None and fi_val < 0:
+                block = True
+        if self.params.vwap_filter_mode == 1:
+            vwap_val = self._get_line(data, 'vwap')
+            if vwap_val is not None and close_val > vwap_val:
+                block = True
+        elif self.params.vwap_filter_mode == 2:
+            vwap_val = self._get_line(data, 'vwap')
+            if vwap_val is not None and close_val < vwap_val:
+                block = True
+        if self.params.vwma_vs_sma_confirm:
+            vwma_val = self._get_line(data, 'vwma_20')
+            sma_val = self._get_line(data, 'sma_20')
+            if vwma_val is not None and sma_val is not None and vwma_val < sma_val:
+                block = True
+        if self.params.klinger_confirm:
+            kl_val = self._get_line(data, 'klinger')
+            kl_sig = self._get_line(data, 'klinger_signal')
+            if kl_val is not None and kl_sig is not None and kl_val < kl_sig:
+                block = True
+        if self.params.nvi_trend_confirm:
+            nvi_val = self._get_line(data, 'nvi')
+            nvi_sma_val = self._get_line(data, 'nvi_sma')
+            if nvi_val is not None and nvi_sma_val is not None and nvi_val < nvi_sma_val:
+                block = True
+        return {'block_buys': block, 'position_scale': scale}
+
+    def _compute_volatility_breakout_context(self, data):
+        """Evaluate volatility and breakout conditions."""
+        if not self.params.vb_enabled:
+            return {'block_buys': False}
+        block = False
+        close_val = data.close[0]
+        if self.params.donchian_breakout_confirm:
+            dc_upper = self._get_line(data, 'donchian_upper')
+            if dc_upper is not None and close_val < dc_upper:
+                block = True
+        if self.params.keltner_filter_enabled:
+            kelt_upper = self._get_line(data, 'keltner_upper')
+            if kelt_upper is not None and close_val > kelt_upper:
+                block = True
+        bb_pct_b_val = self._get_line(data, 'bb_pct_b')
+        if bb_pct_b_val is not None:
+            if bb_pct_b_val > (1.0 - self.params.bb_pct_b_threshold):
+                block = True
+        bb_w_val = self._get_line(data, 'bb_width')
+        if bb_w_val is not None and bb_w_val < self.params.bb_squeeze_threshold:
+            block = True
+        ulcer_val = self._get_line(data, 'ulcer')
+        if ulcer_val is not None and ulcer_val > self.params.ulcer_max:
+            block = True
+        return {'block_buys': block}
+
+    def _compute_support_resistance_context(self, data):
+        """Evaluate support and resistance conditions."""
+        if not self.params.sr_enabled:
+            return {'block_buys': False}
+        block = False
+        close_val = data.close[0]
+        if self.params.pivot_filter_enabled:
+            r1_val = self._get_line(data, 'pivot_r1')
+            if r1_val is not None and r1_val > 0:
+                if close_val > r1_val * (1.0 + self.params.pivot_proximity_pct / 100.0):
+                    block = True
+        if self.params.fib_filter_enabled:
+            fib38 = self._get_line(data, 'fib_38')
+            fib62 = self._get_line(data, 'fib_62')
+            pct = self.params.fib_level_pct / 100.0
+            near38 = fib38 is not None and abs(close_val - fib38) / fib38 < pct if fib38 else False
+            near62 = fib62 is not None and abs(close_val - fib62) / fib62 < pct if fib62 else False
+            if not near38 and not near62:
+                block = True
+        return {'block_buys': block}
+
+    def _compute_regime_context(self, data):
+        """Evaluate market regime conditions."""
+        if not self.params.regime_enabled:
+            return {'block_buys': False}
+        block = False
+        close_val = data.close[0]
+        sma_20_val = self._get_line(data, 'sma_20')
+        sma_50_val = self._get_line(data, 'sma_50') if hasattr(data, 'sma_50') else None
+        if self.params.regime_sma200_filter and sma_50_val is not None:
+            if close_val < sma_50_val:
+                block = True
+        if not block:
+            count = 0
+            if sma_20_val is not None and close_val > sma_20_val:
+                count += 1
+            if sma_50_val is not None and close_val > sma_50_val:
+                count += 1
+            if count < self.params.regime_trend_req_count:
+                block = True
+        return {'block_buys': block}
+
+    def _compute_position_size_direct(self, data, scale):
+        """Compute position size using advanced sizing models."""
+        cash = self.broker.getcash()
+        close_val = data.close[0]
+        if close_val <= 0:
+            return 0
+        if self.params.sizing_model == 1:
+            risk_amount = cash * self.params.fixed_risk_pct / 100.0 * scale
+            stop_dist = close_val * self.params.stop_loss_pct / 100.0
+            if stop_dist <= 0:
+                return 0
+            return max(1, int(risk_amount / stop_dist))
+        elif self.params.sizing_model == 3:
+            atr_val = self._get_line(data, 'atr_14')
+            if atr_val is None or atr_val <= 0:
+                return int(cash * self.params.position_size_pct / 100.0 / close_val)
+            risk_amount = cash * self.params.fixed_risk_pct / 100.0 * scale
+            stop_dist = atr_val * self.params.atr_stop_multiple
+            if stop_dist <= 0:
+                return 0
+            return max(1, int(risk_amount / stop_dist))
+        return int(cash * self.params.position_size_pct * scale / 100.0 / close_val)
 
     def _signal_ma_crossover(self, data):
         """
@@ -1027,6 +1376,74 @@ def create_strategy_from_trader(trader: GeneticTrader, use_portfolio: bool = Fal
             'sig_rsi_ob', 'sig_rsi_os',
         ]
         for name in ensemble_gene_names:
+            if name in genes:
+                param_list.append((name, genes[name]))
+
+        # Add advanced oscillator genes if present
+        adv_osc_gene_names = [
+            'adv_osc_enabled', 'wr_oversold', 'wr_overbought',
+            'cci_oversold', 'cci_overbought', 'cmo_threshold',
+            'ao_zero_cross_confirm', 'stochrsi_ob', 'stochrsi_os',
+            'uo_overbought', 'uo_oversold', 'roc_period', 'roc_threshold',
+        ]
+        for name in adv_osc_gene_names:
+            if name in genes:
+                param_list.append((name, genes[name]))
+
+        # Add trend signal genes if present
+        trend_sig_gene_names = [
+            'trend_sig_enabled', 'psar_filter_enabled',
+            'supertrend_filter_enabled', 'ichimoku_cloud_filter',
+            'linreg_slope_min', 'linreg_r2_min', 'trix_zero_confirm',
+        ]
+        for name in trend_sig_gene_names:
+            if name in genes:
+                param_list.append((name, genes[name]))
+
+        # Add volume signal genes if present
+        vol_sig_gene_names = [
+            'vol_sig_enabled', 'obv_trend_confirm', 'chaikin_threshold',
+            'force_index_confirm', 'vwap_filter_mode',
+            'vwma_vs_sma_confirm', 'klinger_confirm', 'nvi_trend_confirm',
+        ]
+        for name in vol_sig_gene_names:
+            if name in genes:
+                param_list.append((name, genes[name]))
+
+        # Add volatility breakout genes if present
+        vb_gene_names = [
+            'vb_enabled', 'donchian_breakout_confirm',
+            'keltner_filter_enabled', 'bb_pct_b_threshold',
+            'bb_squeeze_threshold', 'ulcer_max',
+        ]
+        for name in vb_gene_names:
+            if name in genes:
+                param_list.append((name, genes[name]))
+
+        # Add support/resistance genes if present
+        sr_gene_names = [
+            'sr_enabled', 'pivot_filter_enabled', 'pivot_proximity_pct',
+            'fib_filter_enabled', 'fib_level_pct',
+        ]
+        for name in sr_gene_names:
+            if name in genes:
+                param_list.append((name, genes[name]))
+
+        # Add regime detection genes if present
+        regime_gene_names = [
+            'regime_enabled', 'regime_window',
+            'regime_sma200_filter', 'regime_trend_req_count',
+        ]
+        for name in regime_gene_names:
+            if name in genes:
+                param_list.append((name, genes[name]))
+
+        # Add advanced sizing genes if present
+        sizing_gene_names = [
+            'sizing_model', 'kelly_fraction',
+            'atr_stop_multiple', 'fixed_risk_pct',
+        ]
+        for name in sizing_gene_names:
             if name in genes:
                 param_list.append((name, genes[name]))
 

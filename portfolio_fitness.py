@@ -597,7 +597,11 @@ def select_random_portfolio(
     sectors: List[str] = None
 ) -> List[str]:
     """
-    Randomly select stocks for portfolio from database.
+    Randomly select stocks for portfolio.
+
+    When DATA_SOURCE is 'yahoo', selects from a built-in list of liquid
+    US large-cap stocks (no local database required). Otherwise queries
+    the SQLite database.
 
     Args:
         size: Number of stocks to select
@@ -608,11 +612,115 @@ def select_random_portfolio(
     Returns:
         List of stock symbols
     """
-    import sqlite3
     import random as rand
 
     if seed is not None:
         rand.seed(seed)
+
+    data_source = getattr(config, 'DATA_SOURCE', 'sqlite')
+
+    if data_source == 'yahoo':
+        return _select_portfolio_yahoo(size, seed, sectors, rand)
+
+    return _select_portfolio_sqlite(size, min_records, sectors, rand)
+
+
+# Liquid US large-caps grouped by sector for Yahoo-based portfolio selection
+_YAHOO_STOCK_UNIVERSE = {
+    'Technology': [
+        'AAPL', 'MSFT', 'GOOGL', 'META', 'NVDA', 'AVGO', 'ADBE', 'CRM',
+        'CSCO', 'INTC', 'AMD', 'ORCL', 'TXN', 'QCOM', 'IBM', 'NOW',
+        'AMAT', 'MU', 'LRCX', 'KLAC',
+    ],
+    'Healthcare': [
+        'JNJ', 'UNH', 'PFE', 'ABT', 'TMO', 'MRK', 'LLY', 'ABBV',
+        'DHR', 'BMY', 'AMGN', 'MDT', 'GILD', 'ISRG', 'SYK', 'CVS',
+        'CI', 'ZTS', 'VRTX', 'REGN',
+    ],
+    'Financials': [
+        'JPM', 'BAC', 'WFC', 'GS', 'MS', 'BLK', 'SCHW', 'AXP',
+        'C', 'USB', 'PNC', 'TFC', 'COF', 'BK', 'CME', 'ICE',
+        'MMC', 'AON', 'MET', 'PRU',
+    ],
+    'Consumer Discretionary': [
+        'AMZN', 'TSLA', 'HD', 'MCD', 'NKE', 'LOW', 'SBUX', 'TJX',
+        'BKNG', 'CMG', 'MAR', 'ORLY', 'ROST', 'DHI', 'LEN', 'GM',
+        'F', 'YUM', 'DG', 'DLTR',
+    ],
+    'Consumer Staples': [
+        'PG', 'KO', 'PEP', 'COST', 'WMT', 'PM', 'MO', 'CL',
+        'EL', 'MDLZ', 'GIS', 'KMB', 'SYY', 'HSY', 'KHC', 'STZ',
+        'ADM', 'CAG', 'CPB', 'SJM',
+    ],
+    'Energy': [
+        'XOM', 'CVX', 'COP', 'SLB', 'EOG', 'MPC', 'PSX', 'VLO',
+        'PXD', 'OXY', 'HAL', 'DVN', 'HES', 'WMB', 'KMI', 'OKE',
+    ],
+    'Industrials': [
+        'CAT', 'GE', 'HON', 'UNP', 'UPS', 'BA', 'RTX', 'DE',
+        'LMT', 'MMM', 'GD', 'NOC', 'WM', 'EMR', 'ITW', 'ETN',
+        'FDX', 'CSX', 'NSC', 'PCAR',
+    ],
+    'Utilities': [
+        'NEE', 'DUK', 'SO', 'D', 'AEP', 'SRE', 'EXC', 'XEL',
+        'WEC', 'ES', 'ED', 'AWK', 'PEG', 'DTE', 'EIX', 'FE',
+    ],
+    'Real Estate': [
+        'AMT', 'PLD', 'CCI', 'EQIX', 'PSA', 'SPG', 'O', 'WELL',
+        'DLR', 'AVB', 'EQR', 'VTR', 'ARE', 'MAA', 'UDR', 'ESS',
+    ],
+    'Materials': [
+        'LIN', 'APD', 'SHW', 'ECL', 'FCX', 'NEM', 'NUE', 'DOW',
+        'DD', 'PPG', 'VMC', 'MLM', 'ALB', 'CE', 'EMN', 'IP',
+    ],
+    'Communication Services': [
+        'GOOG', 'DIS', 'CMCSA', 'NFLX', 'T', 'VZ', 'TMUS', 'CHTR',
+        'EA', 'ATVI', 'TTWO', 'WBD', 'PARA', 'FOX', 'OMC', 'IPG',
+    ],
+}
+
+
+def _select_portfolio_yahoo(size, seed, sectors, rand):
+    """Select portfolio symbols from built-in stock universe."""
+    use_sector_filter = sectors and len(sectors) > 0
+
+    if use_sector_filter:
+        pool = []
+        for sector in sectors:
+            matched = _YAHOO_STOCK_UNIVERSE.get(sector, [])
+            pool.extend([(sym, sector) for sym in matched])
+        if len(pool) < size:
+            raise ValueError(
+                f"Not enough stocks in sectors {sectors}. "
+                f"Found {len(pool)}, need {size}"
+            )
+        selected = rand.sample(pool, size)
+        symbols = [s[0] for s in selected]
+        filter_label = f" from sectors: {', '.join(sectors)}"
+        print(f"\nRandomly selected {size} stocks{filter_label}:")
+        for i, (sym, sec) in enumerate(selected, 1):
+            print(f"  {i}. {sym} ({sec})")
+    else:
+        pool = []
+        for sector, syms in _YAHOO_STOCK_UNIVERSE.items():
+            pool.extend([(sym, sector) for sym in syms])
+        if len(pool) < size:
+            raise ValueError(
+                f"Not enough stocks in universe. "
+                f"Found {len(pool)}, need {size}"
+            )
+        selected = rand.sample(pool, size)
+        symbols = [s[0] for s in selected]
+        print(f"\nRandomly selected {size} stocks (Yahoo universe):")
+        for i, (sym, sec) in enumerate(selected, 1):
+            print(f"  {i}. {sym} ({sec})")
+
+    return symbols
+
+
+def _select_portfolio_sqlite(size, min_records, sectors, rand):
+    """Select portfolio symbols from SQLite database."""
+    import sqlite3
 
     conn = sqlite3.connect(config.DATABASE_PATH)
     cursor = conn.cursor()
@@ -620,7 +728,6 @@ def select_random_portfolio(
     use_sector_filter = sectors and len(sectors) > 0
 
     if use_sector_filter:
-        # Join with stocks table to filter by sector
         placeholders = ','.join(['?' for _ in sectors])
         query = f"""
             SELECT di.symbol, s.sector
@@ -633,7 +740,6 @@ def select_random_portfolio(
         """
         params = list(sectors) + [min_records]
     else:
-        # Check if stocks table has sector for display purposes
         cursor.execute(
             "SELECT name FROM sqlite_master "
             "WHERE type='table' AND name='stocks'"
@@ -670,7 +776,6 @@ def select_random_portfolio(
             f"Found {len(available_stocks)}, need {size}"
         )
 
-    # Randomly select stocks
     selected = rand.sample(available_stocks, size)
     symbols = [stock[0] for stock in selected]
 

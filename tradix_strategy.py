@@ -120,9 +120,21 @@ class TradixPortfolioStrategy(MultiAssetStrategy):
             # Compute per-stock technical indicator context
             ti = self._compute_technical_context(symbol, bar)
 
-            # Combine macro + TI contexts
-            block_buys = macro['block_buys'] or ti['block_buys']
-            position_scale = macro['position_scale'] * ti['position_scale']
+            # Compute new context modifiers
+            adv_osc = self._compute_advanced_oscillator_context(symbol, bar)
+            trend_sig = self._compute_trend_signal_context(symbol, bar)
+            vol_sig = self._compute_volume_signal_context(symbol, bar)
+            vb = self._compute_volatility_breakout_context(symbol, bar)
+            sr = self._compute_support_resistance_context(symbol, bar)
+            regime_ctx = self._compute_regime_context(symbol, bar)
+
+            # Combine all contexts
+            block_buys = (macro['block_buys'] or ti['block_buys'] or
+                          adv_osc.get('block_buys', False) or trend_sig.get('block_buys', False) or
+                          vol_sig.get('block_buys', False) or vb.get('block_buys', False) or
+                          sr.get('block_buys', False) or regime_ctx.get('block_buys', False))
+            position_scale = (macro['position_scale'] * ti['position_scale'] *
+                              adv_osc.get('position_scale', 1.0) * vol_sig.get('position_scale', 1.0))
             stop_loss_adj = macro['stop_loss_adj'] * ti['stop_loss_adj']
             take_profit_adj = macro['take_profit_adj'] * ti['take_profit_adj']
 
@@ -162,9 +174,17 @@ class TradixPortfolioStrategy(MultiAssetStrategy):
                     if block_buys:
                         continue
 
-                    adjusted_pct = self._p('position_size_pct', 10.0) * position_scale
-                    available_cash = self.cash
-                    size = int((available_cash * adjusted_pct / 100) / bar.close)
+                    sizing = self._p('sizing_model', 0)
+                    if sizing in (1, 3):
+                        size = self._compute_position_size_direct(symbol, bar, position_scale)
+                    elif sizing == 2:
+                        adjusted_pct = self._p('position_size_pct', 10.0) * position_scale * self._p('kelly_fraction', 0.5)
+                        available_cash = self.cash
+                        size = int((available_cash * adjusted_pct / 100) / bar.close)
+                    else:
+                        adjusted_pct = self._p('position_size_pct', 10.0) * position_scale
+                        available_cash = self.cash
+                        size = int((available_cash * adjusted_pct / 100) / bar.close)
 
                     if size > 0:
                         self.buy(symbol, size)
@@ -484,6 +504,243 @@ class TradixPortfolioStrategy(MultiAssetStrategy):
         context['position_scale'] = max(0.1, context['position_scale'])
 
         return context
+
+    # ------------------------------------------------------------------
+    # Advanced oscillator context
+    # ------------------------------------------------------------------
+
+    def _compute_advanced_oscillator_context(self, symbol, bar):
+        """Evaluate advanced oscillator conditions."""
+        if not self._p('adv_osc_enabled', 0):
+            return {'block_buys': False, 'position_scale': 1.0}
+        block = False
+        scale = 1.0
+        wr_val = self._get_supp(symbol, 'wr', bar)
+        if wr_val is not None:
+            if wr_val > self._p('wr_overbought', -20):
+                block = True
+            elif wr_val < self._p('wr_oversold', -80):
+                scale *= 1.1
+        cci_val = self._get_supp(symbol, 'cci', bar)
+        if cci_val is not None:
+            if cci_val > self._p('cci_overbought', 100):
+                block = True
+            elif cci_val < self._p('cci_oversold', -100):
+                scale *= 1.1
+        cmo_val = self._get_supp(symbol, 'cmo', bar)
+        if cmo_val is not None:
+            if abs(cmo_val) < self._p('cmo_threshold', 25.0):
+                scale *= 0.7
+        ao_val = self._get_supp(symbol, 'ao', bar)
+        if ao_val is not None and self._p('ao_zero_cross_confirm', 0):
+            if ao_val < 0:
+                block = True
+        stochrsi_k_val = self._get_supp(symbol, 'stochrsi_k', bar)
+        if stochrsi_k_val is not None and stochrsi_k_val > self._p('stochrsi_ob', 80.0):
+            block = True
+        uo_val = self._get_supp(symbol, 'uo', bar)
+        if uo_val is not None:
+            if uo_val > self._p('uo_overbought', 70.0):
+                block = True
+            elif uo_val < self._p('uo_oversold', 30.0):
+                scale *= 1.1
+        roc_val = self._get_supp(symbol, 'roc', bar)
+        roc_thresh = self._p('roc_threshold', 0.0)
+        if roc_val is not None and roc_thresh != 0:
+            if roc_thresh > 0 and roc_val < roc_thresh:
+                block = True
+            elif roc_thresh < 0 and roc_val > roc_thresh:
+                block = True
+        scale = max(0.1, scale)
+        return {'block_buys': block, 'position_scale': scale}
+
+    # ------------------------------------------------------------------
+    # Trend signal context
+    # ------------------------------------------------------------------
+
+    def _compute_trend_signal_context(self, symbol, bar):
+        """Evaluate trend signal conditions."""
+        if not self._p('trend_sig_enabled', 0):
+            return {'block_buys': False}
+        block = False
+        close_val = bar.close
+        if self._p('psar_filter_enabled', 0):
+            psar_val = self._get_supp(symbol, 'psar', bar)
+            if psar_val is not None and close_val < psar_val:
+                block = True
+        if self._p('supertrend_filter_enabled', 0):
+            st_dir = self._get_supp(symbol, 'supertrend_dir', bar)
+            if st_dir is not None and st_dir < 0:
+                block = True
+        if self._p('ichimoku_cloud_filter', 0):
+            ichi_val = self._get_supp(symbol, 'ichimoku_above_cloud', bar)
+            if ichi_val is not None and ichi_val < 0:
+                block = True
+        lr_slope_val = self._get_supp(symbol, 'linreg_slope', bar)
+        if lr_slope_val is not None and lr_slope_val < self._p('linreg_slope_min', -999.0):
+            block = True
+        lr_r2_val = self._get_supp(symbol, 'linreg_r2', bar)
+        if lr_r2_val is not None and lr_r2_val < self._p('linreg_r2_min', 0.0):
+            block = True
+        if self._p('trix_zero_confirm', 0):
+            trix_val = self._get_supp(symbol, 'trix', bar)
+            if trix_val is not None and trix_val < 0:
+                block = True
+        return {'block_buys': block}
+
+    # ------------------------------------------------------------------
+    # Volume signal context
+    # ------------------------------------------------------------------
+
+    def _compute_volume_signal_context(self, symbol, bar):
+        """Evaluate volume signal conditions."""
+        if not self._p('vol_sig_enabled', 0):
+            return {'block_buys': False, 'position_scale': 1.0}
+        block = False
+        scale = 1.0
+        close_val = bar.close
+        chaikin_thresh = self._p('chaikin_threshold', 0.0)
+        if chaikin_thresh > 0:
+            ch_val = self._get_supp(symbol, 'chaikin', bar)
+            if ch_val is not None and ch_val < chaikin_thresh:
+                block = True
+        if self._p('force_index_confirm', 0):
+            fi_val = self._get_supp(symbol, 'force_index', bar)
+            if fi_val is not None and fi_val < 0:
+                block = True
+        vwap_mode = self._p('vwap_filter_mode', 0)
+        if vwap_mode == 1:
+            vwap_val = self._get_supp(symbol, 'vwap', bar)
+            if vwap_val is not None and close_val > vwap_val:
+                block = True
+        elif vwap_mode == 2:
+            vwap_val = self._get_supp(symbol, 'vwap', bar)
+            if vwap_val is not None and close_val < vwap_val:
+                block = True
+        if self._p('vwma_vs_sma_confirm', 0):
+            vwma_val = self._get_supp(symbol, 'vwma_20', bar)
+            sma_val = self._get_supp(symbol, 'sma_20', bar)
+            if vwma_val is not None and sma_val is not None and vwma_val < sma_val:
+                block = True
+        if self._p('klinger_confirm', 0):
+            kl_val = self._get_supp(symbol, 'klinger', bar)
+            kl_sig = self._get_supp(symbol, 'klinger_signal', bar)
+            if kl_val is not None and kl_sig is not None and kl_val < kl_sig:
+                block = True
+        if self._p('nvi_trend_confirm', 0):
+            nvi_val = self._get_supp(symbol, 'nvi', bar)
+            nvi_sma_val = self._get_supp(symbol, 'nvi_sma', bar)
+            if nvi_val is not None and nvi_sma_val is not None and nvi_val < nvi_sma_val:
+                block = True
+        return {'block_buys': block, 'position_scale': scale}
+
+    # ------------------------------------------------------------------
+    # Volatility breakout context
+    # ------------------------------------------------------------------
+
+    def _compute_volatility_breakout_context(self, symbol, bar):
+        """Evaluate volatility and breakout conditions."""
+        if not self._p('vb_enabled', 0):
+            return {'block_buys': False}
+        block = False
+        close_val = bar.close
+        if self._p('donchian_breakout_confirm', 0):
+            dc_upper = self._get_supp(symbol, 'donchian_upper', bar)
+            if dc_upper is not None and close_val < dc_upper:
+                block = True
+        if self._p('keltner_filter_enabled', 0):
+            kelt_upper = self._get_supp(symbol, 'keltner_upper', bar)
+            if kelt_upper is not None and close_val > kelt_upper:
+                block = True
+        bb_pct_b_val = self._get_supp(symbol, 'bb_pct_b', bar)
+        if bb_pct_b_val is not None:
+            if bb_pct_b_val > (1.0 - self._p('bb_pct_b_threshold', 1.0)):
+                block = True
+        bb_w_val = self._get_supp(symbol, 'bb_width', bar)
+        if bb_w_val is not None and bb_w_val < self._p('bb_squeeze_threshold', 2.0):
+            block = True
+        ulcer_val = self._get_supp(symbol, 'ulcer', bar)
+        if ulcer_val is not None and ulcer_val > self._p('ulcer_max', 999.0):
+            block = True
+        return {'block_buys': block}
+
+    # ------------------------------------------------------------------
+    # Support / resistance context
+    # ------------------------------------------------------------------
+
+    def _compute_support_resistance_context(self, symbol, bar):
+        """Evaluate support and resistance conditions."""
+        if not self._p('sr_enabled', 0):
+            return {'block_buys': False}
+        block = False
+        close_val = bar.close
+        if self._p('pivot_filter_enabled', 0):
+            r1_val = self._get_supp(symbol, 'pivot_r1', bar)
+            if r1_val is not None and r1_val > 0:
+                if close_val > r1_val * (1.0 + self._p('pivot_proximity_pct', 2.0) / 100.0):
+                    block = True
+        if self._p('fib_filter_enabled', 0):
+            fib38 = self._get_supp(symbol, 'fib_38', bar)
+            fib62 = self._get_supp(symbol, 'fib_62', bar)
+            pct = self._p('fib_level_pct', 3.0) / 100.0
+            near38 = fib38 is not None and abs(close_val - fib38) / fib38 < pct if fib38 else False
+            near62 = fib62 is not None and abs(close_val - fib62) / fib62 < pct if fib62 else False
+            if not near38 and not near62:
+                block = True
+        return {'block_buys': block}
+
+    # ------------------------------------------------------------------
+    # Regime context
+    # ------------------------------------------------------------------
+
+    def _compute_regime_context(self, symbol, bar):
+        """Evaluate market regime conditions."""
+        if not self._p('regime_enabled', 0):
+            return {'block_buys': False}
+        block = False
+        close_val = bar.close
+        sma_20_val = self._get_supp(symbol, 'sma_20', bar)
+        sma_50_val = self._get_supp(symbol, 'sma_50', bar)
+        if self._p('regime_sma200_filter', 0) and sma_50_val is not None:
+            if close_val < sma_50_val:
+                block = True
+        if not block:
+            count = 0
+            if sma_20_val is not None and close_val > sma_20_val:
+                count += 1
+            if sma_50_val is not None and close_val > sma_50_val:
+                count += 1
+            if count < self._p('regime_trend_req_count', 1):
+                block = True
+        return {'block_buys': block}
+
+    # ------------------------------------------------------------------
+    # Position sizing
+    # ------------------------------------------------------------------
+
+    def _compute_position_size_direct(self, symbol, bar, scale):
+        """Compute position size using advanced sizing models."""
+        cash = self.cash
+        close_val = bar.close
+        if close_val <= 0:
+            return 0
+        sizing = self._p('sizing_model', 0)
+        if sizing == 1:
+            risk_amount = cash * self._p('fixed_risk_pct', 2.0) / 100.0 * scale
+            stop_dist = close_val * self._p('stop_loss_pct', 2.5) / 100.0
+            if stop_dist <= 0:
+                return 0
+            return max(1, int(risk_amount / stop_dist))
+        elif sizing == 3:
+            atr_val = self._get_supp(symbol, 'atr_14', bar)
+            if atr_val is None or atr_val <= 0:
+                return int(cash * self._p('position_size_pct', 10.0) / 100.0 / close_val)
+            risk_amount = cash * self._p('fixed_risk_pct', 2.0) / 100.0 * scale
+            stop_dist = atr_val * self._p('atr_stop_multiple', 2.0)
+            if stop_dist <= 0:
+                return 0
+            return max(1, int(risk_amount / stop_dist))
+        return int(cash * self._p('position_size_pct', 10.0) * scale / 100.0 / close_val)
 
     # ------------------------------------------------------------------
     # Ensemble signals (identical logic to bt_strategy.py L660-818)

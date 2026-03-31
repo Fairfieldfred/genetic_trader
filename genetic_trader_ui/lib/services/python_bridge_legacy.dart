@@ -321,28 +321,6 @@ class EvolutionProgress {
   final bool? isInitialGenes;
   final String? statusMessage;
 
-  /// Group activity rates for the current generation.
-  final Map<String, double>? groupActivityRates;
-
-  /// Average active genes across the population.
-  final int? avgActiveGenes;
-
-  /// Best chromosome genes (sent on completion).
-  final Map<String, double>? bestGenes;
-
-  /// Backtest performance metrics for the best chromosome.
-  final double? bestTotalReturn;
-  final double? bestSharpeRatio;
-  final double? bestMaxDrawdown;
-  final double? bestWinRate;
-  final int? bestTradeCount;
-
-  /// Per-stock trade breakdown (symbol → {trades, won, lost, pnl}).
-  final Map<String, Map<String, dynamic>>? perStockPerformance;
-
-  /// Buy-and-hold benchmark return (fraction, e.g. 0.25 = 25%).
-  final double? buyAndHoldReturn;
-
   EvolutionProgress({
     this.currentGeneration,
     this.totalGenerations,
@@ -354,16 +332,6 @@ class EvolutionProgress {
     this.geneChanges,
     this.isInitialGenes,
     this.statusMessage,
-    this.groupActivityRates,
-    this.avgActiveGenes,
-    this.bestGenes,
-    this.bestTotalReturn,
-    this.bestSharpeRatio,
-    this.bestMaxDrawdown,
-    this.bestWinRate,
-    this.bestTradeCount,
-    this.perStockPerformance,
-    this.buyAndHoldReturn,
   });
 
   double get progress {
@@ -384,16 +352,6 @@ class EvolutionProgress {
     List<GeneChangeInfo>? geneChanges,
     bool? isInitialGenes,
     String? statusMessage,
-    Map<String, double>? groupActivityRates,
-    int? avgActiveGenes,
-    Map<String, double>? bestGenes,
-    double? bestTotalReturn,
-    double? bestSharpeRatio,
-    double? bestMaxDrawdown,
-    double? bestWinRate,
-    int? bestTradeCount,
-    Map<String, Map<String, dynamic>>? perStockPerformance,
-    double? buyAndHoldReturn,
   }) {
     return EvolutionProgress(
       currentGeneration:
@@ -410,24 +368,6 @@ class EvolutionProgress {
           isInitialGenes ?? this.isInitialGenes,
       statusMessage:
           statusMessage ?? this.statusMessage,
-      groupActivityRates:
-          groupActivityRates ?? this.groupActivityRates,
-      avgActiveGenes:
-          avgActiveGenes ?? this.avgActiveGenes,
-      bestGenes: bestGenes ?? this.bestGenes,
-      bestTotalReturn:
-          bestTotalReturn ?? this.bestTotalReturn,
-      bestSharpeRatio:
-          bestSharpeRatio ?? this.bestSharpeRatio,
-      bestMaxDrawdown:
-          bestMaxDrawdown ?? this.bestMaxDrawdown,
-      bestWinRate: bestWinRate ?? this.bestWinRate,
-      bestTradeCount:
-          bestTradeCount ?? this.bestTradeCount,
-      perStockPerformance:
-          perStockPerformance ?? this.perStockPerformance,
-      buyAndHoldReturn:
-          buyAndHoldReturn ?? this.buyAndHoldReturn,
     );
   }
 }

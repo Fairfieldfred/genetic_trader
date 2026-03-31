@@ -50,6 +50,18 @@ class ResultsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Select a result with pre-built fitness history (in-memory).
+  void selectResultWithHistory(
+    EvolutionResult result,
+    List<FitnessHistoryEntry>? history,
+  ) {
+    _selectedResult = result;
+    _fitnessHistory = history;
+    _isLoading = false;
+    _error = null;
+    notifyListeners();
+  }
+
   /// Load a specific result by run_id and select it
   Future<void> loadAndSelectResult(String runId) async {
     _isLoading = true;
