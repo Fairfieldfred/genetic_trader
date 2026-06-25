@@ -14,7 +14,6 @@ PORTFOLIO_STOCKS = [
 ]
 AUTO_SELECT_PORTFOLIO = True
 PORTFOLIO_SECTORS = [
-    "Industrials",
 ]
 
 # Data split configuration
@@ -56,23 +55,6 @@ GENE_DEFINITIONS = {
     'stop_loss_pct': (1.0, 10.0, float),
     'take_profit_pct': (2.0, 15.0, float),
     'position_size_pct': (5.0, 25.0, float),
-
-    # Macroeconomic Context genes
-    'macro_enabled': (0, 1, int),
-    'macro_weight': (0.0, 1.0, float),
-    'macro_vix_threshold': (15.0, 50.0, float),
-    'macro_vix_position_scale': (0.2, 1.0, float),
-    'macro_yc_threshold': (-1.0, 1.0, float),
-    'macro_yc_action': (0, 2, int),
-    'macro_rate_threshold': (1.0, 8.0, float),
-    'macro_rate_position_scale': (0.3, 1.0, float),
-    'macro_cpi_threshold': (2.0, 8.0, float),
-    'macro_cpi_position_scale': (0.3, 1.0, float),
-    'macro_unemp_threshold': (4.0, 10.0, float),
-    'macro_unemp_action': (0, 2, int),
-    'macro_risk_stop_adj': (0.5, 2.0, float),
-    'macro_risk_tp_adj': (0.5, 2.0, float),
-    'macro_regime_count_req': (1, 4, int),
 }
 
 # Gene order in chromosome (important for consistency)
@@ -83,25 +65,10 @@ GENE_ORDER = [
     'stop_loss_pct',
     'take_profit_pct',
     'position_size_pct',
-    'macro_enabled',
-    'macro_weight',
-    'macro_vix_threshold',
-    'macro_vix_position_scale',
-    'macro_yc_threshold',
-    'macro_yc_action',
-    'macro_rate_threshold',
-    'macro_rate_position_scale',
-    'macro_cpi_threshold',
-    'macro_cpi_position_scale',
-    'macro_unemp_threshold',
-    'macro_unemp_action',
-    'macro_risk_stop_adj',
-    'macro_risk_tp_adj',
-    'macro_regime_count_req',
 ]
 
 # Macroeconomic data configuration
-USE_MACRO_DATA = True
+USE_MACRO_DATA = False
 MACRO_DATA_TABLE = 'macro_indicators'
 
 # Technical indicator filter configuration
@@ -111,8 +78,8 @@ USE_TECHNICAL_INDICATORS = False
 USE_ENSEMBLE_SIGNALS = False
 
 # Backtesting configuration
-BACKTESTING_ENGINE = 'tradix'
-DATA_SOURCE = 'yahoo'
+BACKTESTING_ENGINE = 'backtrader'
+DATA_SOURCE = 'sqlite'
 INITIAL_CASH = 100000.0
 COMMISSION = 0.001  # 0.1% commission per trade
 
