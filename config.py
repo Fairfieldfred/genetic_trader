@@ -97,6 +97,12 @@ FITNESS_WEIGHTS = {
     'win_rate': 0.12,
 }
 
+# When True, the return component of fitness is scored as EXCESS return over an
+# equal-weight buy-and-hold of the same basket (alpha) instead of absolute
+# return. Stops the GA from being rewarded for merely staying invested in a
+# rising market. Computed per-fold so it stays correct under K-fold CV.
+USE_EXCESS_RETURN_FITNESS = False
+
 # Minimum trades required for valid fitness
 MIN_TRADES_REQUIRED = 5
 

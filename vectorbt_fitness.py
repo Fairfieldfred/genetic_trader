@@ -95,6 +95,32 @@ class VectorbtFitnessEvaluator:
         # Pre-compute fold boundaries
         self.folds = self._compute_folds()
 
+        # Keep the full loaded universe so baskets can be re-sampled cheaply
+        # (data is loaded once; only the working set is rebuilt per basket).
+        self._universe_symbols = list(self.valid_symbols)
+
+        # Build the working set (close matrix, MA caches, aligned indicators)
+        # for the currently-active symbols.
+        self._build_working_set()
+
+    def set_active_basket(self, symbols: List[str]):
+        """
+        Restrict the evaluator's working set to a subset of the loaded universe.
+
+        Lets the GA evaluate each generation on a different random basket so that
+        evolved genes must generalize across symbols rather than memorize one
+        basket. Data is NOT reloaded — only the close matrix, MA caches, and
+        aligned-indicator views are rebuilt (~hundreds of ms per call).
+        """
+        chosen = [s for s in symbols if s in self.data_feeds]
+        if not chosen:
+            raise ValueError("set_active_basket: none of the requested symbols are loaded")
+        self.valid_symbols = chosen
+        self._build_working_set(verbose=False)
+
+    def _build_working_set(self, verbose: bool = True):
+        """(Re)build close matrix, MA caches, and aligned indicators for
+        self.valid_symbols. Idempotent — safe to call on basket change."""
         # Build master close price DataFrame for vectorbt
         self._close = pd.DataFrame({
             sym: df['close']
@@ -105,7 +131,8 @@ class VectorbtFitnessEvaluator:
         self._close = self._close.sort_index()
         self._close = self._close.ffill()
 
-        print(f"  Close matrix: {self._close.shape[0]} dates x {self._close.shape[1]} symbols")
+        if verbose:
+            print(f"  Close matrix: {self._close.shape[0]} dates x {self._close.shape[1]} symbols")
 
         # --- Pre-compute all MA windows (one-time cost ~300ms) ---
         import time as _time
@@ -113,8 +140,9 @@ class VectorbtFitnessEvaluator:
         all_windows = sorted(set(range(5, 101)))
         self._sma_cache = vbt.MA.run(self._close, window=all_windows, ewm=False)
         self._ema_cache = vbt.MA.run(self._close, window=all_windows, ewm=True)
-        print(f"  Pre-computed {len(all_windows)} SMA+EMA windows: "
-              f"{(_time.time()-_t0)*1000:.0f}ms")
+        if verbose:
+            print(f"  Pre-computed {len(all_windows)} SMA+EMA windows: "
+                  f"{(_time.time()-_t0)*1000:.0f}ms")
 
         # --- Pre-align per-stock indicator data to the close index ---
         # Avoids repeated DataFrame.reindex() in ensemble/TI per trader
@@ -138,8 +166,9 @@ class VectorbtFitnessEvaluator:
                 if col in df_reindexed.columns:
                     aligned[col] = df_reindexed[col].values
             self._aligned_indicators[symbol] = aligned
-        print(f"  Pre-aligned indicator data for {len(self.valid_symbols)} symbols: "
-              f"{(_time.time()-_t0)*1000:.0f}ms")
+        if verbose:
+            print(f"  Pre-aligned indicator data for {len(self.valid_symbols)} symbols: "
+                  f"{(_time.time()-_t0)*1000:.0f}ms")
 
     def _compute_folds(self) -> List[Tuple[str, str]]:
         """
@@ -181,16 +210,47 @@ class VectorbtFitnessEvaluator:
 
         return folds
 
+    def _benchmark_return(self, close_slice: pd.DataFrame) -> float:
+        """
+        Equal-weight buy-and-hold return (%) of the traded basket over the
+        exact slice being scored. This is the honest "could I have just held
+        the same stocks?" baseline. Computed per-slice so it stays correct
+        under K-fold (each fold gets its own benchmark).
+        """
+        rets = []
+        for col in close_slice.columns:
+            series = close_slice[col].dropna()
+            if len(series) < 2:
+                continue
+            first, last = series.iloc[0], series.iloc[-1]
+            if first and first > 0:
+                rets.append((last - first) / first)
+        if not rets:
+            return 0.0
+        return float(np.mean(rets)) * 100.0
+
     def _score_results(self, results: Dict[str, Any]) -> float:
         """
         Compute fitness score from backtest results.
-        Exact copy from PortfolioFitnessEvaluator.
+
+        When config.USE_EXCESS_RETURN_FITNESS is True, the return component is
+        scored as EXCESS return over an equal-weight buy-and-hold of the same
+        basket (alpha), rather than absolute return. This stops the GA from
+        being rewarded for simply staying invested in a rising market.
         """
         if results['trade_count'] < config.MIN_TRADES_REQUIRED:
             return -100.0
 
+        use_excess = getattr(config, 'USE_EXCESS_RETURN_FITNESS', False)
+        if use_excess:
+            return_component = (
+                results['total_return'] - results.get('benchmark_return', 0.0)
+            )
+        else:
+            return_component = results['total_return']
+
         fitness = (
-            config.FITNESS_WEIGHTS['total_return'] * results['total_return'] +
+            config.FITNESS_WEIGHTS['total_return'] * return_component +
             config.FITNESS_WEIGHTS['sharpe_ratio'] * results['sharpe_ratio'] * 10 +
             config.FITNESS_WEIGHTS['max_drawdown'] * results['max_drawdown'] +
             config.FITNESS_WEIGHTS['win_rate'] * results['win_rate']
@@ -640,6 +700,38 @@ class VectorbtFitnessEvaluator:
         # Size: apply combined position scale
         size_array = (position_size_pct * combined_scale).values
 
+        # --- Optional gene: ATR-based volatility position sizing ---
+        # When atr_sizing_enabled, size each position so the per-trade risk
+        # (stop distance × size) targets atr_risk_pct of capital, using each
+        # stock's ATR as the volatility estimate. Lower-vol names get larger
+        # positions, higher-vol names smaller — equal risk per trade.
+        # Backward compatible: absent gene -> disabled, original sizing kept.
+        if int(genes.get('atr_sizing_enabled', 0)):
+            atr_risk_pct = float(genes.get('atr_risk_pct', 1.0)) / 100.0
+            atr_mult = float(genes.get('atr_stop_multiple', 2.0))
+            dates_idx = close_slice.index
+            is_full_atr = len(dates_idx) == len(self._close.index)
+            for col_idx, col in enumerate(close_slice.columns):
+                cached = self._aligned_indicators.get(col, {})
+                # natr = normalized ATR = 100 * ATR/price (already % of price).
+                # This is what DataLoader provides (raw atr_14 is not loaded).
+                natr = cached.get('natr')
+                if natr is None:
+                    continue
+                natr_s = pd.Series(natr, index=self._close.index)
+                if not is_full_atr:
+                    natr_s = natr_s.reindex(dates_idx, method='ffill')
+                # stop distance as fraction of price = atr_mult * (natr/100)
+                stop_dist = (atr_mult * natr_s / 100.0).replace(0, np.nan)
+                vol_size = (atr_risk_pct / stop_dist)
+                # cap at the trader's position_size_pct, floor at 1% so a
+                # position is still taken; fill gaps with the flat size
+                vol_size = vol_size.clip(lower=0.01, upper=position_size_pct)
+                vol_size = vol_size.fillna(position_size_pct)
+                # apply combined_scale (macro/TI) on top
+                size_array[:, col_idx] = (vol_size.values *
+                                          combined_scale[col].values)
+
         # Initial allocation sizing: on the first bar, buy an equal share
         # of the allocation capital for each stock.
         if initial_alloc_pct > 0:
@@ -660,11 +752,18 @@ class VectorbtFitnessEvaluator:
             sl_param = sl_stop
             tp_param = tp_stop
 
+        # --- Optional gene: trailing stop-loss ---
+        # When sl_trail_enabled, the stop-loss becomes a trailing stop (ratchets
+        # up as price rises) instead of a fixed stop from entry. Lets winners run
+        # while still protecting gains. Backward compatible: absent gene -> False.
+        sl_trail = bool(int(genes.get('sl_trail_enabled', 0)))
+
         pf = vbt.Portfolio.from_signals(
             close=close_slice,
             entries=entries,
             exits=exits,
             sl_stop=sl_param,
+            sl_trail=sl_trail,
             tp_stop=tp_param,
             size=size_array,
             size_type='percent',
@@ -676,7 +775,9 @@ class VectorbtFitnessEvaluator:
             call_seq='auto',
         )
 
-        return self._extract_results(pf)
+        results = self._extract_results(pf)
+        results['benchmark_return'] = self._benchmark_return(close_slice)
+        return results
 
     def _extract_results(self, pf) -> Dict[str, Any]:
         """Extract standardized results dict from a vectorbt Portfolio."""
@@ -772,22 +873,26 @@ class VectorbtFitnessEvaluator:
         Evaluate all traders using batch MA computation.
 
         Phase 2 upgrades:
-        - Full chromosome dedup: identical (short, long, ma_type, sl, tp, sz)
-          tuples run only once
+        - Full chromosome dedup: traders with identical ACTIVE gene values
+          run only once
         - K-fold support: respects self.folds the same way calculate_fitness() does
         - Progress reporting
         """
-        # Extract chromosome keys for dedup
+        # Extract chromosome keys for dedup.
+        # Hash the FULL active gene set (config.GENE_ORDER), not just the 6 core
+        # genes — otherwise traders that differ only in ensemble/macro/TI genes
+        # would be wrongly collapsed into one evaluation. Ints are kept exact;
+        # floats are rounded to 6 dp so float jitter doesn't defeat dedup.
         def _chrom_key(t):
             g = t.get_genes()
-            return (
-                int(g['ma_short_period']),
-                int(g['ma_long_period']),
-                int(g['ma_type']),
-                round(float(g['stop_loss_pct']), 6),
-                round(float(g['take_profit_pct']), 6),
-                round(float(g['position_size_pct']), 6),
-            )
+            key = []
+            for name in config.GENE_ORDER:
+                val = g[name]
+                if isinstance(val, float):
+                    key.append(round(val, 6))
+                else:
+                    key.append(int(val))
+            return tuple(key)
 
         dedup_enabled = getattr(config, 'VECTORBT_DEDUP', True)
 

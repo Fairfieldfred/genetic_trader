@@ -2,6 +2,8 @@
 
 A dual-codebase project: **Python backend** (genetic algorithm + backtesting engine) with a **Flutter desktop UI** (configuration + evolution monitoring). The Flutter UI generates a Python `config.py` and launches `evolve.py` as a subprocess, streaming real-time progress.
 
+> **Research log:** See [`FINDINGS_DNA_INVESTIGATION.md`](../FINDINGS_DNA_INVESTIGATION.md) for the genome ("DNA") investigation — what's been tested for OOS edge, what helped (signal-generation genes) vs. didn't (selection tuning, risk-control genes), code changes made, and recommended next steps. Read it first when resuming genome/fitness work.
+
 ## Directory Layout
 
 ```
