@@ -660,12 +660,39 @@ class VectorbtFitnessEvaluator:
 
         # fast_ma / slow_ma are already clean DataFrames with matching columns
 
+        # --- Optional gene: TREND-FOLLOWING signal mode ---
+        # Self-contained momentum/trend-persistence signal computed from the
+        # close matrix (no extra indicators needed). Goes long while the trend
+        # persists (price above its own trend SMA AND positive N-day momentum)
+        # and exits only when the trend breaks — designed to STAY long in
+        # uptrends rather than time entries/exits like the crossover/ensemble.
+        # Backward compatible: absent gene -> disabled, falls through below.
+        trend_entries = trend_exits = None
+        if int(genes.get('trend_follow_enabled', 0)):
+            tf_sma = int(genes.get('tf_sma_period', 50))
+            tf_mom = int(genes.get('tf_momentum_period', 20))
+            tf_sma = max(2, min(200, tf_sma))
+            tf_mom = max(2, min(200, tf_mom))
+            # trend filter: price above its own SMA
+            trend_sma = close_slice.rolling(tf_sma, min_periods=1).mean()
+            above = close_slice > trend_sma
+            # momentum: price higher than tf_mom bars ago
+            mom_up = close_slice > close_slice.shift(tf_mom)
+            in_trend = above & mom_up
+            prev = in_trend.shift(1, fill_value=False)
+            trend_entries = (in_trend & ~prev)   # enter when trend turns on
+            trend_exits = (~in_trend & prev)     # exit when trend turns off
+
         # Phase 3: ensemble signals (or fall back to MA crossover)
         ens_entries, ens_exits = self._compute_ensemble_signals(
             close_slice, genes, fast_ma, slow_ma
         )
 
-        if ens_entries is not None:
+        if trend_entries is not None:
+            # Trend-following mode takes precedence when enabled
+            entries = trend_entries & ~combined_block
+            exits = trend_exits | ti["force_exit"]
+        elif ens_entries is not None:
             entries = ens_entries & ~combined_block
             exits = ens_exits | ti["force_exit"]
         else:
